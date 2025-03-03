@@ -1,0 +1,58 @@
+server:
+  port: 8083
+
+spring:
+  kafka:
+    bootstrap-servers: localhost:29092
+    consumer:
+      group-id: event-store-group
+      auto-offset-reset: earliest
+
+  data:
+    mongodb:
+      uri: mongodb://admin:admin@localhost:27017/eventstore?authSource=admin
+      database: eventstore
+      field-naming-strategy: org.springframework.data.mapping.model.CamelCaseAbbreviatingFieldNamingStrategy
+      auto-index-creation: true
+      dot-replacement: _
+
+eventstore:
+  topics: customer.updated.event,customer.registered.event,customer.deleted.event
+
+---
+# 🔹 Konfiguracja dla DEV
+spring:
+  config:
+    activate:
+      on-profile: dev
+  data:
+    mongodb:
+      uri: mongodb://admin:admin@localhost:27017/eventstore_dev?authSource=admin
+      database: eventstore_dev
+      field-naming-strategy: org.springframework.data.mapping.model.CamelCaseAbbreviatingFieldNamingStrategy
+      auto-index-creation: true
+      dot-replacement: _
+
+---
+# 🔹 Konfiguracja dla TEST
+spring:
+  config:
+    activate:
+      on-profile: test
+  data:
+    mongodb:
+      uri: mongodb://admin:admin@localhost:27017/eventstore_test?authSource=admin
+      database: eventstore_test
+      auto-index-creation: true
+
+---
+# 🔹 Konfiguracja dla PROD
+spring:
+  config:
+    activate:
+      on-profile: prod
+  data:
+    mongodb:
+      uri: mongodb://eventstore:password@mongo-prod-server:27017/eventstore
+      database: eventstore
+      auto-index-creation: true

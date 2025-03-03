@@ -8,6 +8,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.function.client.WebClient;
+import pl.ecommerce.customer.infrastructure.client.dto.GeoLocationResponse;
 import reactor.core.publisher.Mono;
 
 import java.util.Map;
@@ -42,14 +43,5 @@ public class GeolocationClient {
 				.doOnError(e -> log.error("Error fetching geolocation for IP: {}", ipAddress, e));
 	}
 
-	@Setter
-	@Getter
-	public static class GeoLocationResponse {
-		private String country;
-		private String city;
-		private String state;
-		private String postalCode;
-		private Map<String, String> currency;
 
-	}
 }

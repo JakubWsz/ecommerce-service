@@ -3,13 +3,15 @@ db = db.getSiblingDB("admin");
 db.createUser({
     user: "eventstore",
     pwd: "password",
-    roles: [
-        { role: "readWrite", db: "eventstore" }
-    ]
+    roles: [{ role: "readWrite", db: "eventstore_dev" }]
 });
 
-db = db.getSiblingDB("eventstore");
+db = db.getSiblingDB("eventstore_dev");
 db.createCollection("events");
+
+db.events.createIndex({ "aggregateId": 1 });
+db.events.createIndex({ "eventType": 1 });
+db.events.createIndex({ "timestamp": 1 });
 
 db.events.createIndex({ "aggregateId": 1 });
 db.events.createIndex({ "eventType": 1 });
