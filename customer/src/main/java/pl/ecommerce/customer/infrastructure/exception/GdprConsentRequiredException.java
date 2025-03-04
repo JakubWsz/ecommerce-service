@@ -5,7 +5,4 @@ public class GdprConsentRequiredException extends RuntimeException {
 		super(message);
 	}
 
-	public static GdprConsentRequiredException throwEx(String message) {
-		throw new GdprConsentRequiredException(message);
-	}
 }

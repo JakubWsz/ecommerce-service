@@ -5,7 +5,4 @@ public class CustomerAlreadyExistsException extends RuntimeException {
 		super(message);
 	}
 
-	public static CustomerAlreadyExistsException throwEx(String message) {
-		throw new CustomerAlreadyExistsException(message);
-	}
 }

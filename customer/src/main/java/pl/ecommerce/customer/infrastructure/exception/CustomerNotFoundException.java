@@ -5,7 +5,4 @@ public class CustomerNotFoundException extends RuntimeException {
 		super(message);
 	}
 
-	public static CustomerNotFoundException throwEx(String message) {
-		throw new CustomerNotFoundException(message);
-	}
 }

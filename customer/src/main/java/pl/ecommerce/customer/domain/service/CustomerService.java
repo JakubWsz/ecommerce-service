@@ -16,6 +16,7 @@ import pl.ecommerce.customer.infrastructure.client.GeolocationClient;
 import pl.ecommerce.customer.infrastructure.exception.CustomerAlreadyExistsException;
 import pl.ecommerce.customer.infrastructure.exception.CustomerNotFoundException;
 import pl.ecommerce.customer.infrastructure.exception.GdprConsentRequiredException;
+import pl.ecommerce.customer.infrastructure.exception.InternalAppException;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
@@ -45,13 +46,13 @@ public class CustomerService {
 		log.info("Registering new customer with email: {}", customer.getPersonalData().getEmail());
 
 		if (!customer.isGdprConsent()) {
-			return Mono.error(GdprConsentRequiredException.throwEx("GDPR consent is required"));
+			return Mono.error(new GdprConsentRequiredException("GDPR consent is required"));
 		}
 
 		return customerRepository.getCustomerByEmail(customer.getPersonalData().getEmail())
 				.flatMap(existing -> {
 					log.warn("Customer with email {} already exists", customer.getPersonalData().getEmail());
-					return Mono.error(CustomerAlreadyExistsException.throwEx("Customer with this email already exists"));
+					return Mono.error(new CustomerAlreadyExistsException("Customer with this email already exists"));
 				})
 				.then(Mono.defer(() -> {
 					LocalDateTime now = LocalDateTime.now();
@@ -91,7 +92,7 @@ public class CustomerService {
 
 					return customerMono
 							.flatMap(customerRepository::saveCustomer)
-							.switchIfEmpty(Mono.error(new RuntimeException("Failed to save customer")))
+							.switchIfEmpty(Mono.error(new InternalAppException("Failed to save customer")))
 							.doOnSuccess(c -> {
 								log.info("Customer registered successfully with id: {}", c.getId());
 								var customerRegisteredEvent = CustomerRegisteredEvent.builder()
@@ -104,7 +105,7 @@ public class CustomerService {
 								eventPublisher.publish(customerRegisteredEvent);
 							})
 							.doOnError(e -> log.error("Error occurred while saving customer: {}", e.getMessage(), e))
-							.onErrorMap(e -> new RuntimeException("Custom error message: Failed to register customer. Reason: " + e.getMessage(), e)); // Przekazanie błędu dalej
+							.onErrorMap(e -> new InternalAppException("Custom error message: Failed to register customer. Reason: " + e.getMessage(), e)); // Przekazanie błędu dalej
 
 				}));
 	}

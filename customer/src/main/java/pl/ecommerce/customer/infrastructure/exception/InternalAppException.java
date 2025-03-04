@@ -5,7 +5,8 @@ public class InternalAppException extends RuntimeException {
 		super(message);
 	}
 
-	public static InternalAppException throwEx(String message) {
-		throw new InternalAppException(message);
+	public InternalAppException(String message, Throwable e) {
+		super(message, e);
 	}
+
 }
