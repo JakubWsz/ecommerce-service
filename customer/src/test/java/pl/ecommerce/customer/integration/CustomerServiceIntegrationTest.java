@@ -258,9 +258,8 @@ public class CustomerServiceIntegrationTest {
 				null
 		);
 
-
 		StepVerifier.create(customerService.registerCustomer(duplicateCustomer, "127.0.0.1"))
-				.expectErrorMatches(throwable -> throwable instanceof CustomerAlreadyExistsException)
+				.expectErrorMatches(e -> e.getMessage().contains("Customer with this email already exists"))
 				.verify();
 
 		verify(eventPublisher, never()).publish(any());

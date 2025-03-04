@@ -16,7 +16,6 @@ import pl.ecommerce.customer.domain.model.*;
 import pl.ecommerce.customer.domain.repository.CustomerRepositoryMongo;
 import pl.ecommerce.customer.infrastructure.client.GeolocationClient;
 import pl.ecommerce.customer.infrastructure.client.dto.GeoLocationResponse;
-import pl.ecommerce.customer.infrastructure.exception.CustomerAlreadyExistsException;
 import pl.ecommerce.customer.infrastructure.exception.CustomerNotFoundException;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -58,6 +57,7 @@ public class CustomerServiceTest {
 
 	private Customer customer;
 	private UUID customerId;
+	private GeoLocationResponse geoResponse;
 
 	@BeforeEach
 	public void setup() {
@@ -82,6 +82,16 @@ public class CustomerServiceTest {
 				null
 		);
 		customer.setId(customerId);
+
+		geoResponse = new GeoLocationResponse();
+		geoResponse.setCountry("Poland");
+		geoResponse.setCity("Warsaw");
+		geoResponse.setState("Mazovia");
+		geoResponse.setPostalCode("00-001");
+
+		Map<String, String> currencyMap = new HashMap<>();
+		currencyMap.put("PLN", "100");
+		geoResponse.setCurrency(currencyMap);
 	}
 
 	@Test
@@ -89,11 +99,9 @@ public class CustomerServiceTest {
 		when(customerRepository.getCustomerByEmail(any())).thenReturn(Mono.just(customer));
 
 		StepVerifier.create(customerService.registerCustomer(customer, "127.0.0.1"))
-				.expectErrorMatches(e -> e instanceof CustomerAlreadyExistsException &&
-						e.getMessage().contains("already exists"))
+				.expectErrorMatches(e -> e.getMessage().contains("Customer with this email already exists"))
 				.verify();
 
-		// Verify no event was published
 		verify(eventPublisher, never()).publish(any());
 	}
 
