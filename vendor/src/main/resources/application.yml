@@ -1,0 +1,185 @@
+# application.yml for Vendor Service
+spring:
+  application:
+    name: vendor-service
+
+  # Reactive MongoDB configuration
+  data:
+    mongodb:
+      uri: mongodb://${MONGO_USER:vendor_user}:${MONGO_PASSWORD:vendor_password}@${MONGO_HOST:localhost}:${MONGO_PORT:27017}/vendor?authSource=admin
+      database: vendor
+      auto-index-creation: true
+
+  # Kafka configuration
+  kafka:
+    bootstrap-servers: ${KAFKA_SERVERS:localhost:9092}
+    consumer:
+      group-id: ${spring.application.name}
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
+
+# Server settings
+server:
+  port: ${SERVER_PORT:8085}
+  shutdown: graceful
+  http2:
+    enabled: true
+
+# External services configuration
+product:
+  service:
+    url: ${PRODUCT_SERVICE_URL:http://localhost:8081}
+
+payment:
+  service:
+    url: ${PAYMENT_SERVICE_URL:http://localhost:8082}
+
+# WebClient configuration
+webclient:
+  connection-timeout: 5000
+  read-timeout: 5000
+  write-timeout: 5000
+
+# Resilience4j configuration for circuit breaker
+resilience4j:
+  circuitbreaker:
+    instances:
+      productService:
+        slidingWindowSize: 10
+        failureRateThreshold: 50
+        waitDurationInOpenState: 10000
+        permittedNumberOfCallsInHalfOpenState: 5
+      paymentGateway:
+        slidingWindowSize: 10
+        failureRateThreshold: 50
+        waitDurationInOpenState: 10000
+        permittedNumberOfCallsInHalfOpenState: 5
+  timelimiter:
+    instances:
+      productService:
+        timeoutDuration: 5s
+      paymentGateway:
+        timeoutDuration: 10s
+  retry:
+    instances:
+      productService:
+        maxAttempts: 3
+        waitDuration: 1000
+        retryExceptions:
+          - org.springframework.web.reactive.function.client.WebClientResponseException
+          - java.util.concurrent.TimeoutException
+          - java.io.IOException
+      paymentGateway:
+        maxAttempts: 3
+        waitDuration: 1000
+
+# Monitoring and actuator configuration
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus,metrics,loggers,env,beans
+  endpoint:
+    health:
+      show-details: always
+    prometheus:
+      access: unrestricted
+  metrics:
+    distribution:
+      percentiles-histogram:
+        http.server.requests: true
+      percentiles:
+        http.server.requests: 0.5, 0.9, 0.95, 0.99
+    tags:
+      application: ${spring.application.name}
+  prometheus:
+    metrics:
+      export:
+        enabled: true
+
+# Logging configuration
+logging:
+  level:
+    root: INFO
+    pl.ecommerce: INFO
+    pl.ecommerce.vendor: DEBUG
+    org.springframework.data.mongodb: INFO
+    org.springframework.web.reactive.function.client.ExchangeFunctions: DEBUG
+  logstash:
+    host: ${LOGSTASH_HOST:localhost}
+    port: ${LOGSTASH_PORT:5000}
+
+# Swagger/OpenAPI documentation
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+  api-docs:
+    path: /v3/api-docs
+
+---
+# Dev profile
+spring:
+  config:
+    activate:
+      on-profile: dev
+  data:
+    mongodb:
+      uri: mongodb://vendor_user:vendor_password@localhost:27017/vendor_dev?authSource=admin
+      database: vendor_dev
+
+logging:
+  level:
+    pl.ecommerce.vendor: DEBUG
+    org.springframework.data.mongodb: DEBUG
+
+---
+# Test profile
+spring:
+  config:
+    activate:
+      on-profile: test
+  data:
+    mongodb:
+      uri: mongodb://vendor_user:vendor_password@localhost:27017/vendor_test?authSource=admin
+      database: vendor_test
+
+logging:
+  level:
+    pl.ecommerce.vendor: DEBUG
+    org.springframework.test: DEBUG
+
+---
+# Prod profile
+spring:
+  config:
+    activate:
+      on-profile: prod
+  data:
+    mongodb:
+      uri: mongodb://${MONGO_USER:vendor_user}:${MONGO_PASSWORD:vendor_password}@${MONGO_HOST:mongodb}:${MONGO_PORT:27017}/vendor?authSource=admin
+      database: vendor
+
+logging:
+  level:
+    root: WARN
+    pl.ecommerce.vendor: INFO
+
+# Disable Swagger UI for production
+springdoc:
+  swagger-ui:
+    enabled: false
+  api-docs:
+    enabled: false
+
+# Security configuration
+server:
+  http2:
+    enabled: true
+  ssl:
+    enabled: ${SSL_ENABLED:false}
+    key-store: ${SSL_KEY_STORE:}
+    key-store-password: ${SSL_KEY_STORE_PASSWORD:}
