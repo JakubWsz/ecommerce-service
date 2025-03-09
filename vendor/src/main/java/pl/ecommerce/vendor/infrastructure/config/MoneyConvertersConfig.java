@@ -17,7 +17,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 @Configuration
-public class MoneyConverters {
+public class MoneyConvertersConfig {
 
 	@Bean
 	public MongoCustomConversions mongoCustomConversions() {

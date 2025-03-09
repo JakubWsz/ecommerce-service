@@ -25,29 +25,6 @@ public class VendorValidator {
 			Pattern.compile("^\\+?[0-9]{8,15}$");
 
 
-	public static Vendor initializeNewVendor(Vendor requestVendor) {
-		UUID vendorId = UUID.randomUUID();
-		LocalDateTime now = LocalDateTime.now();
-
-		return Vendor.builder()
-				.id(vendorId)
-				.name(requestVendor.getName())
-				.description(requestVendor.getDescription())
-				.email(requestVendor.getEmail())
-				.phone(requestVendor.getPhone())
-				.businessName(requestVendor.getBusinessName())
-				.taxId(requestVendor.getTaxId())
-				.businessAddress(requestVendor.getBusinessAddress())
-				.bankAccountDetails(requestVendor.getBankAccountDetails())
-				.registrationDate(now)
-				.createdAt(now)
-				.updatedAt(now)
-				.gdprConsent(requestVendor.getGdprConsent())
-				.consentTimestamp(requestVendor.getGdprConsent() ? now : null)
-				.active(true)
-				.build();
-	}
-
 	public static Mono<Void> validateVendor(Vendor vendor) {
 		if (vendor.getEmail() == null || !EMAIL_PATTERN.matcher(vendor.getEmail()).matches()) {
 			return Mono.error(new ValidationException("Invalid email format"));
@@ -74,31 +51,26 @@ public class VendorValidator {
 		}
 
 		vendor.setVendorStatus(Vendor.VendorStatus.valueOf("ACTIVE"));
-		vendor.setUpdatedAt(LocalDateTime.now());
 		return vendor;
 	}
 
 	public static Vendor suspendVendor(Vendor vendor, String reason) {
 		vendor.setVendorStatus(Vendor.VendorStatus.valueOf("SUSPENDED"));
-		vendor.setUpdatedAt(LocalDateTime.now());
-		//todo publish
+		vendor.setStatusChangeReason(reason);
 		return vendor;
 	}
 
 	public static Vendor banVendor(Vendor vendor, String reason) {
 		vendor.setVendorStatus(Vendor.VendorStatus.valueOf("BANNED"));
+		vendor.setStatusChangeReason(reason);
 		vendor.setActive(false);
-		vendor.setUpdatedAt(LocalDateTime.now());
-		//todo publish
-
 		return vendor;
 	}
 
-	public static Vendor updateVerificationStatus(Vendor vendor, Vendor.VendorVerificationStatus status) {
-		vendor.setVerificationVendorStatus(status);
-		vendor.setUpdatedAt(LocalDateTime.now());
+	public static Vendor updateVerificationStatus(Vendor vendor, Vendor.VerificationStatus status) {
+		vendor.setVerificationStatus(status);
 
-		if (Vendor.VendorVerificationStatus.VERIFIED.equals(status) && vendor.isPending()) {
+		if (Vendor.VerificationStatus.VERIFIED.equals(status) && vendor.isPending()) {
 			vendor.setVendorStatus(Vendor.VendorStatus.ACTIVE);
 		}
 
@@ -112,11 +84,11 @@ public class VendorValidator {
 		return Mono.empty();
 	}
 
-	public static boolean isValidVerificationStatus(Vendor.VendorVerificationStatus status) {
+	public static boolean isValidVerificationStatus(Vendor.VerificationStatus status) {
 		return !EnumSet.of(
-				Vendor.VendorVerificationStatus.PENDING,
-				Vendor.VendorVerificationStatus.VERIFIED,
-				Vendor.VendorVerificationStatus.REJECTED
+				Vendor.VerificationStatus.PENDING,
+				Vendor.VerificationStatus.VERIFIED,
+				Vendor.VerificationStatus.REJECTED
 		).contains(status);
 	}
 }

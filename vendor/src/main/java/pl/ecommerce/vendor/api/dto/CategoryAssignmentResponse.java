@@ -2,7 +2,7 @@ package pl.ecommerce.vendor.api.dto;
 
 import lombok.Builder;
 
-import java.math.BigDecimal;
+import javax.money.MonetaryAmount;
 import java.time.LocalDateTime;
 import java.util.UUID;
 
@@ -10,10 +10,10 @@ import java.util.UUID;
 public record CategoryAssignmentResponse(
 		 UUID id,
 		 UUID vendorId,
-		 String categoryId,
+		 UUID categoryId,
 		 String categoryName,
 		 String status,
-		 BigDecimal categoryCommissionRate,
+		 MonetaryAmount categoryCommissionRate,
 		 LocalDateTime assignedAt,
 		 LocalDateTime createdAt,
 		 LocalDateTime updatedAt

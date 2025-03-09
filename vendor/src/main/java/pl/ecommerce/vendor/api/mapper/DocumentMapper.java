@@ -10,7 +10,6 @@ public class DocumentMapper {
 
 	public static DocumentResponse toResponse(VerificationDocument document) {
 		return DocumentResponse.builder()
-				.id(document.getId())
 				.vendorId(document.getVendorId())
 				.documentType(String.valueOf(document.getDocumentType()))
 				.documentUrl(document.getDocumentUrl())

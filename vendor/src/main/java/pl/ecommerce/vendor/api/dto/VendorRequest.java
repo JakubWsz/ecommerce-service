@@ -4,8 +4,6 @@ import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 
-import java.util.List;
-
 public record VendorRequest(
 		@NotBlank(message = "Name is required")
 		String name,
@@ -19,7 +17,6 @@ public record VendorRequest(
 		String taxId,
 		AddressDto businessAddress,
 		String bankAccountDetails,
-		List<String> categoryIds,
 		@NotNull(message = "GDPR consent is required")
 		Boolean gdprConsent
 ) {

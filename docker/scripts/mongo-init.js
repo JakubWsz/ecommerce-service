@@ -32,3 +32,17 @@ db.createCollection("customers");
 
 db.customers.createIndex({ "id": 1 }, { unique: true });
 db.customers.createIndex({ "email": 1 }, { unique: true });
+
+db = db.getSiblingDB("admin");
+db.createUser({
+    user: "vendor_user",
+    pwd: "vendor_password",
+    roles: [{ role: "readWrite", db: "vendor_dev" }]
+});
+
+db = db.getSiblingDB("vendor_dev");
+db.createCollection("vendor_categories");
+
+db.vendor_categories.createIndex({ "vendorId": 1 });
+db.vendor_categories.createIndex({ "category.id": 1 });
+db.vendor_categories.createIndex({ "status": 1 });

@@ -8,7 +8,6 @@ import java.util.Map;
 import java.util.UUID;
 
 @Data
-@NoArgsConstructor
 @AllArgsConstructor
 @EqualsAndHashCode(callSuper = true)
 @Message("customer.updated.event")

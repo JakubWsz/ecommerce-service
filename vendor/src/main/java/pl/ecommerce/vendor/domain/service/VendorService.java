@@ -6,7 +6,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import pl.ecommerce.commons.kafka.EventPublisher;
 import pl.ecommerce.vendor.domain.model.Vendor;
-import pl.ecommerce.vendor.domain.repository.CategoryAssignmentRepository;
 import pl.ecommerce.vendor.domain.repository.VendorRepository;
 import pl.ecommerce.vendor.infrastructure.VendorValidator;
 import pl.ecommerce.vendor.infrastructure.exception.ValidationException;
@@ -17,13 +16,12 @@ import reactor.core.publisher.Mono;
 
 import java.time.LocalDateTime;
 import java.util.*;
+import java.util.function.Consumer;
 
+import static pl.ecommerce.vendor.infrastructure.VendorEventUtils.*;
 import static pl.ecommerce.vendor.infrastructure.VendorValidator.isValidVerificationStatus;
 import static pl.ecommerce.vendor.infrastructure.VendorValidator.validateGdprConsent;
-import static pl.ecommerce.vendor.infrastructure.utils.VendorCategoryUtils.assignCategoriesAndPublishEvent;
-import static pl.ecommerce.vendor.infrastructure.utils.VendorEventPublisherUtils.*;
-import static pl.ecommerce.vendor.infrastructure.utils.VendorServiceConstants.*;
-import static pl.ecommerce.vendor.infrastructure.utils.VendorUpdateUtils.updateFieldIfPresent;
+import static pl.ecommerce.vendor.infrastructure.constant.VendorConstants.*;
 
 @Service
 @RequiredArgsConstructor
@@ -31,84 +29,96 @@ import static pl.ecommerce.vendor.infrastructure.utils.VendorUpdateUtils.updateF
 public class VendorService {
 
 	private final VendorRepository vendorRepository;
-	private final CategoryAssignmentRepository categoryAssignmentRepository;
 	private final EventPublisher eventPublisher;
 
 	@Transactional
 	public Mono<Vendor> registerVendor(Vendor vendor) {
-		log.info(LOG_REGISTERING_VENDOR, vendor.getEmail());
+		log.info(LOG_OPERATION_STARTED, "Vendor registration", "email", vendor.getEmail());
 
 		return validateGdprConsent(vendor)
 				.then(checkIfVendorExists(vendor.getEmail()))
 				.then(Mono.defer(() -> createAndSaveVendor(vendor)))
-				.flatMap(v -> assignCategoriesAndPublishEvent(vendor, categoryAssignmentRepository, eventPublisher))
-				.doOnError(e -> log.error(LOG_ERROR_SAVING_VENDOR, e.getMessage(), e));
+				.flatMap(savedVendor -> publishVendorRegisteredEvent(eventPublisher, savedVendor)
+						.doOnSuccess(v -> log.info(LOG_ENTITY_CREATED, "Vendor", savedVendor.getId()))
+						.doOnError(e -> log.error(LOG_ERROR, "vendor registration", e.getMessage(), e)));
 	}
 
 	public Mono<Vendor> getVendorById(UUID id) {
-		log.debug(LOG_FETCHING_VENDOR, id);
+		log.debug(LOG_OPERATION_STARTED, "Vendor retrieval", "id", id);
 
 		return vendorRepository.findById(id)
 				.switchIfEmpty(Mono.error(new VendorNotFoundException(ERROR_VENDOR_NOT_FOUND + id)))
-				.doOnNext(c -> log.debug(LOG_VENDOR_FOUND, c))
-				.doOnError(e -> log.error(ERROR_FETCHING_VENDOR, e.getMessage()));
+				.doOnSuccess(vendor -> log.debug(LOG_OPERATION_COMPLETED, "Vendor retrieval", "id", id))
+				.doOnError(e -> log.error(LOG_ERROR, "vendor retrieval", e.getMessage(), e));
 	}
 
 	public Flux<Vendor> getAllVendors() {
-		log.debug(LOG_FETCHING_ALL_VENDORS);
-		return vendorRepository.findByActiveTrue();
+		log.debug(LOG_OPERATION_STARTED, "All vendors retrieval", "", "");
+
+		return vendorRepository.findByActiveTrue()
+				.doOnComplete(() -> log.debug(LOG_OPERATION_COMPLETED, "All vendors retrieval", "", ""));
 	}
 
 	@Transactional
 	public Mono<Vendor> updateVendor(UUID id, Vendor vendorUpdate) {
-		logUpdatingVendor(id);
+		log.info(LOG_OPERATION_STARTED, "Vendor update", "id", id);
 
 		return vendorRepository.findById(id)
 				.switchIfEmpty(Mono.error(new VendorNotFoundException(ERROR_VENDOR_NOT_FOUND + id)))
-				.flatMap(existingVendor -> updateVendorData(vendorUpdate, existingVendor));
+				.flatMap(existingVendor -> updateVendorData(vendorUpdate, existingVendor))
+				.doOnSuccess(vendor -> log.info(LOG_ENTITY_UPDATED, "Vendor", vendor.getId()))
+				.doOnError(e -> log.error(LOG_ERROR, "vendor update", e.getMessage(), e));
 	}
 
 	@Transactional
 	public Mono<Vendor> updateVendorStatus(UUID id, Vendor.VendorStatus status, String reason) {
-		logUpdatingVendor(id);
+		log.info(LOG_OPERATION_STARTED, "Vendor status update", "id", id);
 
 		return vendorRepository.findById(id)
 				.switchIfEmpty(Mono.error(new VendorNotFoundException(ERROR_VENDOR_NOT_FOUND + id)))
-				.flatMap(existingVendor -> processVendorStatusUpdate(existingVendor, status, reason));
+				.flatMap(existingVendor -> processVendorStatusUpdate(existingVendor, status, reason))
+				.doOnSuccess(vendor -> log.info(LOG_ENTITY_UPDATED, "Vendor status", vendor.getId()))
+				.doOnError(e -> log.error(LOG_ERROR, "vendor status update", e.getMessage(), e));
 	}
 
 	@Transactional
-	public Mono<Vendor> updateVerificationStatus(UUID id, Vendor.VendorVerificationStatus status) {
-		log.info(LOG_UPDATING_VERIFICATION_STATUS, id, status);
+	public Mono<Vendor> updateVerificationStatus(UUID id, Vendor.VerificationStatus status) {
+		log.info(LOG_OPERATION_STARTED, "Verification status update", "vendor", id);
 
 		if (isValidVerificationStatus(status)) {
-			return Mono.error(new ValidationException("Invalid verification status: " + status));
+			return Mono.error(new ValidationException(ERROR_INVALID_STATUS + status));
 		}
 
 		return vendorRepository.findById(id)
 				.switchIfEmpty(Mono.error(new VendorNotFoundException(ERROR_VENDOR_NOT_FOUND + id)))
-				.flatMap(vendor -> updateAndSaveVendor(vendor, status));
+				.flatMap(vendor -> updateAndSaveVendor(vendor, status)
+						.switchIfEmpty(Mono.error(new IllegalStateException("updateAndSaveVendor returned null!"))))
+				.doOnSuccess(vendor -> log.info(LOG_ENTITY_UPDATED, "Verification status", vendor.getId()))
+				.doOnError(e -> log.error(LOG_ERROR, "verification status update", e.getMessage(), e));
 	}
 
 	@Transactional
 	public Mono<Void> deactivateVendor(UUID id) {
-		log.info(LOG_DEACTIVATING_VENDOR, id);
+		log.info(LOG_OPERATION_STARTED, "Vendor deactivation", "id", id);
 
 		return vendorRepository.findById(id)
 				.switchIfEmpty(Mono.error(new VendorNotFoundException(ERROR_VENDOR_NOT_FOUND + id)))
 				.flatMap(this::deactivateVendor)
-				.doOnSuccess(v -> publishVendorStatusChangedEvent(eventPublisher, null, v))
+				.doOnSuccess(v -> {
+					log.info(LOG_ENTITY_UPDATED, "Vendor deactivated", id);
+					publishVendorStatusChangedEvent(eventPublisher, null, v);
+				})
+				.doOnError(e -> log.error(LOG_ERROR, "vendor deactivation", e.getMessage(), e))
 				.then();
 	}
 
 	private Mono<Vendor> deactivateVendor(Vendor vendor) {
 		vendor.setActive(false);
-		vendor.setUpdatedAt(LocalDateTime.now());
 		return vendorRepository.save(vendor);
 	}
 
 	private Mono<Vendor> createAndSaveVendor(Vendor vendor) {
-		Vendor newVendor = VendorValidator.initializeNewVendor(vendor);
+		Vendor newVendor = initializeNewVendor(vendor);
 		return VendorValidator.validateVendor(newVendor)
 				.then(vendorRepository.save(newVendor));
 	}
@@ -120,7 +130,7 @@ public class VendorService {
 					case ACTIVE -> VendorValidator.activateVendor(existingVendor);
 					case SUSPENDED -> VendorValidator.suspendVendor(existingVendor, reason);
 					case BANNED -> VendorValidator.banVendor(existingVendor, reason);
-					default -> throw new ValidationException("Invalid status: " + status);
+					default -> throw new ValidationException(ERROR_INVALID_STATUS + status);
 				};
 
 				return vendorRepository.save(updatedVendor)
@@ -131,7 +141,7 @@ public class VendorService {
 		});
 	}
 
-	private Mono<Vendor> updateAndSaveVendor(Vendor vendor, Vendor.VendorVerificationStatus status) {
+	private Mono<Vendor> updateAndSaveVendor(Vendor vendor, Vendor.VerificationStatus status) {
 		return Mono.just(vendor)
 				.map(v -> VendorValidator.updateVerificationStatus(v, status))
 				.flatMap(vendorRepository::save)
@@ -145,8 +155,8 @@ public class VendorService {
 
 	private static Mono<Void> throwIfExists(String email, Boolean exists) {
 		if (exists) {
-			log.warn(LOG_VENDOR_EXISTS, email);
-			return Mono.error(new VendorAlreadyExistsException("Vendor with email " + email + " already exists"));
+			log.warn("Vendor with email {} already exists", email);
+			return Mono.error(new VendorAlreadyExistsException(ERROR_VENDOR_ALREADY_EXISTS.replace("{}", email)));
 		}
 		return Mono.empty();
 	}
@@ -162,20 +172,60 @@ public class VendorService {
 		updateFieldIfPresent(vendorUpdate.getBusinessAddress(), existingVendor::setBusinessAddress, "businessAddress", changes);
 		updateFieldIfPresent(vendorUpdate.getBankAccountDetails(), existingVendor::setBankAccountDetails, "bankAccountDetails", changes);
 
-		existingVendor.setUpdatedAt(LocalDateTime.now());
-
 		return vendorRepository.save(existingVendor)
-				.doOnSuccess(vendor -> logVendorUpdated(vendor.getId()));
-
-		//todo publish updateVendorEvent
-
+				.doOnSuccess(vendor -> {
+					log.info(LOG_ENTITY_UPDATED, "Vendor", vendor.getId());
+					publishVendorUpdatedEvent(eventPublisher, vendor.getId(), changes);
+				});
 	}
 
-	private static void logVendorUpdated(UUID id) {
-		log.info(LOG_VENDOR_UPDATED, id);
+	public static Vendor initializeNewVendor(Vendor requestVendor) {
+		LocalDateTime now = LocalDateTime.now();
+
+		return Vendor.builder()
+				.name(requestVendor.getName())
+				.description(requestVendor.getDescription())
+				.email(requestVendor.getEmail())
+				.phone(requestVendor.getPhone())
+				.businessName(requestVendor.getBusinessName())
+				.taxId(requestVendor.getTaxId())
+				.businessAddress(requestVendor.getBusinessAddress())
+				.bankAccountDetails(requestVendor.getBankAccountDetails())
+				.gdprConsent(requestVendor.getGdprConsent())
+				.consentTimestamp(requestVendor.getGdprConsent() ? now : null)
+				.build();
 	}
 
-	private static void logUpdatingVendor(UUID id) {
-		log.info(LOG_UPDATING_VENDOR, id);
+	public void publishVendorStatusChangedEvent(EventPublisher eventPublisher, String reason, Vendor vendor) {
+		var event = createVendorStatusChangedEvent(vendor, vendor.getVendorStatus(), reason);
+		eventPublisher.publish(event);
+		log.info("Vendor status updated: {}", vendor.getId());
+	}
+
+	public static void publishVendorVerificationEvent(EventPublisher eventPublisher, Vendor vendor) {
+		var event = createVendorVerificationCompletedEvent(vendor);
+		eventPublisher.publish(event);
+		log.info("Vendor verification updated: {}", vendor.getId());
+	}
+
+
+	public static Mono<Vendor> publishVendorRegisteredEvent(EventPublisher eventPublisher, Vendor vendor) {
+		var event = createVendorRegisteredEvent(vendor);
+		eventPublisher.publish(event);
+		log.info("Vendor registered: {}", vendor.getId());
+		return Mono.just(vendor);
+	}
+
+	public static void publishVendorUpdatedEvent(EventPublisher eventPublisher, UUID vendorId, Map<String, Object> changes) {
+		var event = createVendorUpdatedEvent(vendorId,changes);
+		log.info("Vendor data updated: {}", vendorId);
+		eventPublisher.publish(event);
+	}
+
+	public static <T> void updateFieldIfPresent(T newValue, Consumer<T> setter, String fieldName, Map<String, Object> changes) {
+		if (newValue != null) {
+			setter.accept(newValue);
+			changes.put(fieldName, newValue);
+		}
 	}
 }

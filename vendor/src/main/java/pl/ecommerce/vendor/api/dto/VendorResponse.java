@@ -21,7 +21,6 @@ public record VendorResponse(
 		String status,
 		String verificationStatus,
 		MonetaryAmount commissionRate,
-		LocalDateTime registrationDate,
 		List<CategoryAssignmentResponse> categories,
 		LocalDateTime createdAt,
 		LocalDateTime updatedAt,

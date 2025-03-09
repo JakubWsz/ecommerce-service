@@ -1,14 +1,13 @@
 package pl.ecommerce.vendor.infrastructure;
 
-import pl.ecommerce.commons.event.vendor.VendorPaymentProcessedEvent;
-import pl.ecommerce.commons.event.vendor.VendorRegisteredEvent;
-import pl.ecommerce.commons.event.vendor.VendorStatusChangedEvent;
-import pl.ecommerce.commons.event.vendor.VendorVerificationCompletedEvent;
+import pl.ecommerce.commons.dto.CategoryAssignmentDto;
+import pl.ecommerce.commons.event.vendor.*;
 import pl.ecommerce.vendor.domain.model.CategoryAssignment;
 import pl.ecommerce.vendor.domain.model.Vendor;
 import pl.ecommerce.vendor.domain.model.VendorPayment;
 
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
@@ -28,18 +27,12 @@ public final class VendorEventUtils {
 				.build();
 	}
 
-	public static VendorRegisteredEvent createVendorRegisteredEvent(Vendor savedVendor, Set<CategoryAssignment> categories) {
-		Set<Map<UUID, String>> categoriesList = categories.stream()
-				.map(category ->
-						Map.of(category.getCategory().getId(), category.getCategory().getName()))
-				.collect(Collectors.toSet());
-
+	public static VendorRegisteredEvent createVendorRegisteredEvent(Vendor savedVendor) {
 		return VendorRegisteredEvent.builder()
 				.correlationId(UUID.randomUUID())
 				.vendorId(savedVendor.getId())
 				.name(savedVendor.getName())
 				.email(savedVendor.getEmail())
-				.productCategories(categoriesList)
 				.status(savedVendor.getVendorStatus().name())
 				.build();
 	}
@@ -58,8 +51,24 @@ public final class VendorEventUtils {
 		return VendorVerificationCompletedEvent.builder()
 				.correlationId(UUID.randomUUID())
 				.vendorId(vendor.getId())
-				.verificationStatus(vendor.getVerificationVendorStatus().name())
+				.verificationStatus(vendor.getVerificationStatus().name())
 				.verificationTimestamp(LocalDateTime.now())
+				.build();
+	}
+
+	public static VendorUpdatedEvent createVendorUpdatedEvent(UUID vendorId, Map<String, Object> changes) {
+		return VendorUpdatedEvent.builder()
+				.correlationId(UUID.randomUUID())
+				.vendorId(vendorId)
+				.changes(changes)
+				.build();
+	}
+
+	public static VendorCategoriesAssignedEvent createVendorCategoriesAssignedEvent(UUID vendorId, List<CategoryAssignmentDto> categories) {
+		return VendorCategoriesAssignedEvent.builder()
+				.correlationId(UUID.randomUUID())
+				.vendorId(vendorId)
+				.categories(categories)
 				.build();
 	}
 }

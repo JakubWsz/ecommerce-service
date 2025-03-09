@@ -74,7 +74,7 @@ public class VendorController {
 	public Mono<VendorResponse> updateVerificationStatus(
 			@PathVariable String id,
 			@RequestParam String status) {
-		return vendorService.updateVerificationStatus(UUID.fromString(id), Vendor.VendorVerificationStatus.valueOf(status))
+		return vendorService.updateVerificationStatus(UUID.fromString(id), Vendor.VerificationStatus.valueOf(status))
 				.map(VendorMapper::toResponse);
 	}
 

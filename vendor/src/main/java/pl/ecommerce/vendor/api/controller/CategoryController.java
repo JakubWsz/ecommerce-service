@@ -14,6 +14,7 @@ import pl.ecommerce.vendor.domain.service.CategoryService;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
+import java.util.List;
 import java.util.UUID;
 
 @Tag(name = "Vendor Categories", description = "Endpoints for managing vendor product categories")
@@ -28,13 +29,12 @@ public class CategoryController {
 	@Operation(summary = "Assign category", description = "Assigns a product category to a vendor")
 	@PostMapping
 	@ResponseStatus(HttpStatus.CREATED)
-	public Mono<CategoryAssignmentResponse> assignCategory(
+	public Flux<CategoryAssignmentResponse> assignCategory(
 			@PathVariable String vendorId,
-			@RequestBody CategoryAssignmentRequest request) {
-		return categoryService.assignCategory(
+			@RequestBody List<CategoryAssignmentRequest> request) {
+		return categoryService.assignCategories(
 						UUID.fromString(vendorId),
-						request.categoryId(),
-						request.commissionRate())
+						request)
 				.map(CategoryAssignmentMapper::toResponse);
 	}
 
@@ -58,7 +58,7 @@ public class CategoryController {
 			@PathVariable String vendorId,
 			@PathVariable String categoryId,
 			@RequestParam String status) {
-		return categoryService.updateCategoryStatus(UUID.fromString(vendorId), categoryId, CategoryAssignment.CategoryAssignmentStatus.valueOf(status))
+		return categoryService.updateCategoryStatus(UUID.fromString(vendorId), UUID.fromString(categoryId), CategoryAssignment.CategoryAssignmentStatus.valueOf(status))
 				.map(CategoryAssignmentMapper::toResponse);
 	}
 
@@ -68,7 +68,7 @@ public class CategoryController {
 	public Mono<Void> removeCategory(
 			@PathVariable String vendorId,
 			@PathVariable String categoryId) {
-		return categoryService.removeCategory(UUID.fromString(vendorId), categoryId);
+		return categoryService.removeCategory(UUID.fromString(vendorId), UUID.fromString(categoryId));
 	}
 }
 

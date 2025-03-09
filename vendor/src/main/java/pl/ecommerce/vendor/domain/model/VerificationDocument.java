@@ -1,35 +1,52 @@
 package pl.ecommerce.vendor.domain.model;
 
 import lombok.*;
-import org.springframework.data.annotation.Id;
 import org.springframework.data.mongodb.core.mapping.Document;
+import org.springframework.data.mongodb.core.mapping.Field;
 
 import java.time.LocalDateTime;
 import java.util.UUID;
 
 import static pl.ecommerce.vendor.domain.model.VerificationDocument.VerificationStatus.*;
 
-@Builder
+import lombok.experimental.SuperBuilder;
+import org.springframework.data.mongodb.core.index.Indexed;
+
+@ToString
+@SuperBuilder
 @Getter
 @Document(collection = "verification_documents")
-public class VerificationDocument {
+@NoArgsConstructor(access = AccessLevel.PROTECTED)
+public class VerificationDocument extends BaseEntity {
 
-	@Id
-	private UUID id;
+	@Indexed
+	@Field("vendorId")
 	private UUID vendorId;
-	private DocumentType documentType;
-	private String documentUrl;
-	@Setter
-	private VerificationStatus status;
-	@Setter
-	private String reviewNotes;
-	private LocalDateTime submittedAt;
-	@Setter
-	private LocalDateTime reviewedAt;
-	private LocalDateTime createdAt;
-	@Setter
-	private LocalDateTime updatedAt;
 
+	@Field("documentType")
+	private DocumentType documentType;
+
+	@Field("documentUrl")
+	private String documentUrl;
+
+	@Setter
+	@Field("status")
+	private VerificationStatus status;
+
+	@Setter
+	@Field("reviewNotes")
+	private String reviewNotes;
+
+	@Field("submittedAt")
+	private LocalDateTime submittedAt;
+
+	@Setter
+	@Field("reviewedAt")
+	private LocalDateTime reviewedAt;
+
+	@Setter
+	@Field("reviewedBy")
+	private UUID reviewedBy;
 
 	public boolean isPending() {
 		return PENDING.equals(status);
@@ -47,11 +64,19 @@ public class VerificationDocument {
 		return isPending() && (reviewNotes == null || reviewNotes.trim().isEmpty());
 	}
 
-	public enum DocumentType{
-		BUSINESS_LICENSE, ID_CARD, TAX_CERTIFICATE
+	public boolean canTransitionTo(VerificationStatus newStatus) {
+		if (this.status != PENDING) {
+			return false;
+		}
+
+		return newStatus != PENDING;
 	}
 
-	public enum VerificationStatus{
+	public enum DocumentType {
+		BUSINESS_LICENSE, ID_CARD, TAX_CERTIFICATE, BANK_STATEMENT, PROOF_OF_ADDRESS
+	}
+
+	public enum VerificationStatus {
 		PENDING, APPROVED, REJECTED
 	}
 }

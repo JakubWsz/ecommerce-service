@@ -1,71 +1,96 @@
 package pl.ecommerce.vendor.domain.model;
 
-import lombok.Builder;
-
-import java.util.Set;
-import java.util.UUID;
-
-import lombok.Getter;
-import lombok.Setter;
-import org.springframework.data.annotation.Id;
+import lombok.*;
 import org.springframework.data.mongodb.core.index.Indexed;
 import org.springframework.data.mongodb.core.mapping.Document;
+import org.springframework.data.mongodb.core.mapping.Field;
 
 import javax.money.MonetaryAmount;
 import java.time.LocalDateTime;
 
 import static pl.ecommerce.vendor.domain.model.Vendor.VendorStatus.*;
 
-@Builder
+import lombok.experimental.SuperBuilder;
+
+import javax.money.CurrencyUnit;
+
+@ToString
+@SuperBuilder
 @Getter
 @Document(collection = "vendors")
-public class Vendor {
+@NoArgsConstructor(access = AccessLevel.PROTECTED)
+public class Vendor extends BaseEntity {
 
-	@Id
-	private UUID id;
 	@Setter
+	@Field("name")
 	private String name;
+
 	@Setter
+	@Field("description")
 	private String description;
+
 	@Indexed(unique = true)
+	@Field("email")
 	private String email;
+
 	@Setter
+	@Field("phone")
 	private String phone;
+
 	@Setter
+	@Field("businessName")
 	private String businessName;
+
 	@Setter
+	@Field("taxId")
 	private String taxId;
+
 	@Setter
+	@Field("businessAddress")
 	private Address businessAddress;
+
 	@Setter
+	@Field("bankAccountDetails")
 	private String bankAccountDetails;
-	private Set<Category> categories;
+
 	@Builder.Default
 	@Setter
+	@Field("vendorStatus")
 	private VendorStatus vendorStatus = PENDING;
+
 	@Builder.Default
 	@Setter
-	private VendorVerificationStatus verificationVendorStatus = VendorVerificationStatus.PENDING;
+	@Field("vendorVerificationStatus")
+	private VerificationStatus verificationStatus = VerificationStatus.PENDING;
+
+	@Field("commissionRate")
 	private MonetaryAmount commissionRate;
-	private LocalDateTime registrationDate;
+
+	@Field("defaultCurrency")
+	private CurrencyUnit defaultCurrency;
+
 	@Setter
+	@Field("lastActiveDate")
 	private LocalDateTime lastActiveDate;
-	private LocalDateTime createdAt;
-	@Setter
-	private LocalDateTime updatedAt;
+
 	@Builder.Default
+	@Field("gdprConsent")
 	private Boolean gdprConsent = false;
+
+	@Field("consentTimestamp")
 	private LocalDateTime consentTimestamp;
+
 	@Builder.Default
 	@Setter
+	@Field("active")
 	private Boolean active = true;
 
-	public boolean isVerified() {
-		return VendorVerificationStatus.VERIFIED.equals(verificationVendorStatus);
-	}
+	@Setter
+	@Field("statusChangeReason")
+	private String statusChangeReason;
 
-	public boolean isActive() {
-		return active && ACTIVE.equals(vendorStatus);
+	public boolean isVerified() {
+		return VerificationStatus.VERIFIED.equals(verificationStatus);
 	}
 
 	public boolean isPending() {
@@ -80,11 +105,19 @@ public class Vendor {
 		return BANNED.equals(vendorStatus);
 	}
 
-	public enum VendorStatus{
+	public boolean canTransitionTo(VendorStatus newStatus) {
+		if (this.vendorStatus == BANNED && newStatus != BANNED) {
+			return false;
+		}
+
+		return true;
+	}
+
+	public enum VendorStatus {
 		PENDING, ACTIVE, SUSPENDED, BANNED
 	}
 
-	public enum VendorVerificationStatus{
+	public enum VerificationStatus {
 		PENDING, VERIFIED, REJECTED
 	}
 }

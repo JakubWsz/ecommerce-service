@@ -10,6 +10,7 @@ import org.springframework.web.bind.annotation.*;
 import pl.ecommerce.vendor.api.mapper.PaymentMapper;
 import pl.ecommerce.vendor.api.dto.PaymentRequest;
 import pl.ecommerce.vendor.api.dto.PaymentResponse;
+import pl.ecommerce.vendor.domain.model.VendorPayment;
 import pl.ecommerce.vendor.domain.service.PaymentService;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -57,27 +58,29 @@ public class PaymentController {
 
 	@Operation(summary = "Get vendor payments", description = "Gets all payments for a vendor")
 	@GetMapping("/{vendorId}/payments")
-	public Flux<PaymentResponse> getVendorPayments(@PathVariable String vendorId) {
-		return paymentService.getVendorPayments(UUID.fromString(vendorId))
+	public Flux<PaymentResponse> getPayments(@PathVariable String vendorId) {
+		return paymentService.getPayments(UUID.fromString(vendorId))
 				.map(PaymentMapper::toResponse);
 	}
 
 	@Operation(summary = "Get payments by status", description = "Gets vendor payments by status")
 	@GetMapping("/{vendorId}/payments/status/{status}")
-	public Flux<PaymentResponse> getVendorPaymentsByStatus(
+	public Flux<PaymentResponse> getPaymentsByStatus(
 			@PathVariable String vendorId,
 			@PathVariable String status) {
-		return paymentService.getVendorPaymentsByStatus(UUID.fromString(vendorId), status)
+		return paymentService.getPaymentsByStatus(
+						UUID.fromString(vendorId),
+						VendorPayment.VendorPaymentStatus.valueOf(status))
 				.map(PaymentMapper::toResponse);
 	}
 
 	@Operation(summary = "Get payments by date range", description = "Gets vendor payments by date range")
 	@GetMapping("/{vendorId}/payments/date-range")
-	public Flux<PaymentResponse> getVendorPaymentsByDateRange(
-			@PathVariable String  vendorId,
+	public Flux<PaymentResponse> getPaymentsByDateRange(
+			@PathVariable String vendorId,
 			@RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime startDate,
 			@RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime endDate) {
-		return paymentService.getVendorPaymentsByDateRange(UUID.fromString(vendorId), startDate, endDate)
+		return paymentService.getPaymentsByDateRange(UUID.fromString(vendorId), startDate, endDate)
 				.map(PaymentMapper::toResponse);
 	}
 }

@@ -7,8 +7,6 @@ import pl.ecommerce.vendor.api.dto.VendorUpdateRequest;
 import pl.ecommerce.vendor.domain.model.Address;
 import pl.ecommerce.vendor.domain.model.Vendor;
 
-import java.util.ArrayList;
-
 public class VendorMapper {
 
 	private VendorMapper() {
@@ -24,7 +22,6 @@ public class VendorMapper {
 				.taxId(request.taxId())
 				.businessAddress(toAddress(request.businessAddress()))
 				.bankAccountDetails(request.bankAccountDetails())
-				.categoryIds(request.categoryIds() != null ? request.categoryIds() : new ArrayList<>())
 				.gdprConsent(request.gdprConsent())
 				.build();
 	}
@@ -44,7 +41,6 @@ public class VendorMapper {
 
 	public static VendorResponse toResponse(Vendor vendor) {
 		return VendorResponse.builder()
-				.id(vendor.getId())
 				.name(vendor.getName())
 				.description(vendor.getDescription())
 				.email(vendor.getEmail())
@@ -54,9 +50,8 @@ public class VendorMapper {
 				.businessAddress(toAddressDto(vendor.getBusinessAddress()))
 				.bankAccountDetails(vendor.getBankAccountDetails())
 				.status(String.valueOf(vendor.getVendorStatus()))
-				.verificationStatus(String.valueOf(vendor.getVerificationVendorStatus()))
+				.verificationStatus(String.valueOf(vendor.getVerificationStatus()))
 				.commissionRate(vendor.getCommissionRate())
-				.registrationDate(vendor.getRegistrationDate())
 				.createdAt(vendor.getCreatedAt())
 				.updatedAt(vendor.getUpdatedAt())
 				.active(vendor.getActive())

@@ -15,11 +15,8 @@ public interface CategoryAssignmentRepository extends ReactiveMongoRepository<Ca
 
 	Flux<CategoryAssignment> findByVendorIdAndStatus(UUID vendorId, CategoryAssignment.CategoryAssignmentStatus status);
 
-	Flux<CategoryAssignment> findByCategoryId(String categoryId);
+	Mono<CategoryAssignment> findByVendorIdAndCategoryId(UUID vendorId, UUID categoryId);
 
-	Mono<CategoryAssignment> findByVendorIdAndCategoryId(UUID vendorId, String categoryId);
+	Mono<Boolean> existsByVendorIdAndCategoryId(UUID vendorId, UUID categoryId);
 
-	Mono<Boolean> existsByVendorIdAndCategoryId(UUID vendorId, String categoryId);
-
-	Mono<Long> countByVendorIdAndStatus(UUID vendorId, String status);
 }

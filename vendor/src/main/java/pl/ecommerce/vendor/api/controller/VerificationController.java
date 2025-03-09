@@ -16,6 +16,8 @@ import reactor.core.publisher.Mono;
 
 import java.util.UUID;
 
+import static pl.ecommerce.vendor.domain.model.VerificationDocument.DocumentType.BUSINESS_LICENSE;
+
 @Tag(name = "Vendor Verification", description = "Endpoints for managing vendor verification documents")
 @RestController
 @RequestMapping("/api/v1/vendors")
@@ -33,7 +35,7 @@ public class VerificationController {
 			@RequestBody DocumentRequest request) {
 		return verificationService.submitDocument(
 						UUID.fromString(vendorId),
-						request.documentType(),
+						VerificationDocument.DocumentType.valueOf(request.documentType().trim()),
 						request.documentUrl())
 				.map(DocumentMapper::toResponse);
 	}

@@ -1,7 +1,6 @@
 package pl.ecommerce.vendor.domain.model;
 
-import lombok.Builder;
-import lombok.Getter;
+import lombok.*;
 import org.springframework.data.mongodb.core.mapping.Field;
 
 import java.util.Objects;
@@ -10,8 +9,11 @@ import java.util.stream.Stream;
 
 import static java.util.Objects.nonNull;
 
+@ToString
 @Builder
 @Getter
+@AllArgsConstructor
+@NoArgsConstructor
 public class Address {
 	@Field("street")
 	private String street;

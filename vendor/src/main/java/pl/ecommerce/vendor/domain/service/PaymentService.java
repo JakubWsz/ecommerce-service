@@ -21,10 +21,9 @@ import javax.money.MonetaryAmount;
 import java.time.LocalDateTime;
 import java.util.UUID;
 
+import static pl.ecommerce.vendor.api.dto.PaymentRequest.createPaymentRequest;
 import static pl.ecommerce.vendor.infrastructure.VendorEventUtils.createVendorPaymentProcessedEvent;
-import static pl.ecommerce.vendor.infrastructure.utils.VendorPaymentUtils.createPaymentRequest;
-import static pl.ecommerce.vendor.infrastructure.utils.VendorPaymentUtils.createVendorPayment;
-import static pl.ecommerce.vendor.infrastructure.utils.VendorServiceConstants.*;
+import static pl.ecommerce.vendor.infrastructure.constant.PaymentConstants.*;
 
 @Service
 @RequiredArgsConstructor
@@ -38,57 +37,77 @@ public class PaymentService {
 
 	@Transactional
 	public Mono<VendorPayment> createPayment(UUID vendorId, MonetaryAmount amount, String paymentMethod) {
-		log.info(LOG_PROCESSING_PAYMENT, vendorId);
+		log.info(LOG_OPERATION_STARTED, "Payment creation", "vendor", vendorId);
 
 		return vendorRepository.findById(vendorId)
 				.switchIfEmpty(Mono.error(new VendorNotFoundException(ERROR_VENDOR_NOT_FOUND + vendorId)))
-				.flatMap(vendor -> validateAndCreatePayment(vendor, amount, paymentMethod));
+				.flatMap(vendor -> validateAndCreatePayment(vendor, amount, paymentMethod))
+				.doOnSuccess(payment -> log.info(LOG_ENTITY_CREATED, "Payment", payment.getId()))
+				.doOnError(e -> log.error(LOG_ERROR, "payment creation", e.getMessage(), e));
 	}
 
 	@Transactional
 	public Mono<VendorPayment> processPayment(UUID paymentId) {
+		log.info(LOG_OPERATION_STARTED, "Payment processing", "payment", paymentId);
+
 		return paymentRepository.findById(paymentId)
 				.switchIfEmpty(throwPaymentProcessingException(paymentId))
-				.flatMap(this::validateAndProcessPayment);
+				.flatMap(this::validateAndProcessPayment)
+				.doOnSuccess(payment -> log.info(LOG_OPERATION_COMPLETED, "Payment processing", "payment", paymentId))
+				.doOnError(e -> log.error(LOG_ERROR, "payment processing", e.getMessage(), e));
 	}
 
 	public Mono<VendorPayment> getPayment(UUID paymentId) {
+		log.debug(LOG_OPERATION_STARTED, "Payment retrieval", "payment", paymentId);
+
 		return paymentRepository.findById(paymentId)
-				.switchIfEmpty(throwPaymentProcessingException(paymentId));
+				.switchIfEmpty(throwPaymentProcessingException(paymentId))
+				.doOnSuccess(payment -> log.debug(LOG_OPERATION_COMPLETED, "Payment retrieval", "payment", paymentId));
 	}
 
-	public Flux<VendorPayment> getVendorPayments(UUID vendorId) {
+	public Flux<VendorPayment> getPayments(UUID vendorId) {
+		log.debug(LOG_OPERATION_STARTED, "Payments retrieval", "vendor", vendorId);
+
 		return vendorRepository.findById(vendorId)
 				.switchIfEmpty(Mono.error(new VendorNotFoundException(ERROR_VENDOR_NOT_FOUND + vendorId)))
-				.thenMany(paymentRepository.findByVendorId(vendorId));
+				.thenMany(paymentRepository.findByVendorId(vendorId))
+				.doOnComplete(() -> log.debug(LOG_OPERATION_COMPLETED, "Payments retrieval", "vendor", vendorId));
 	}
 
-	public Flux<VendorPayment> getVendorPaymentsByStatus(UUID vendorId, String status) {
+	public Flux<VendorPayment> getPaymentsByStatus(UUID vendorId, VendorPayment.VendorPaymentStatus status) {
+		log.debug(LOG_OPERATION_STARTED, "Payment retrieval by status", "vendor", vendorId);
+
 		return vendorRepository.findById(vendorId)
 				.switchIfEmpty(Mono.error(new VendorNotFoundException(ERROR_VENDOR_NOT_FOUND + vendorId)))
-				.thenMany(paymentRepository.findByVendorIdAndStatus(vendorId, status));
+				.thenMany(paymentRepository.findByVendorIdAndStatus(vendorId, status))
+				.doOnComplete(() -> log.debug(LOG_OPERATION_COMPLETED, "Payment retrieval by status", "vendor", vendorId));
 	}
 
-	public Flux<VendorPayment> getVendorPaymentsByDateRange(UUID vendorId,
-															LocalDateTime start,
-															LocalDateTime end) {
+	public Flux<VendorPayment> getPaymentsByDateRange(UUID vendorId,
+													  LocalDateTime start,
+													  LocalDateTime end) {
+		log.debug(LOG_OPERATION_STARTED, "Payment retrieval by date range", "vendor", vendorId);
+
 		return vendorRepository.findById(vendorId)
 				.switchIfEmpty(Mono.error(new VendorNotFoundException(ERROR_VENDOR_NOT_FOUND + vendorId)))
-				.thenMany(paymentRepository.findByVendorIdAndPaymentDateBetween(vendorId, start, end));
+				.thenMany(paymentRepository.findByVendorIdAndPaymentDateBetween(vendorId, start, end))
+				.doOnComplete(() -> log.debug(LOG_OPERATION_COMPLETED, "Payment retrieval by date range", "vendor", vendorId));
 	}
 
 	private Mono<VendorPayment> validateAndCreatePayment(Vendor vendor, MonetaryAmount amount, String paymentMethod) {
-		if (!vendor.isActive()) {
-			return throwPaymentProcessingException(CANNOT_PROCESS_PAYMENT);
+		if (!vendor.getActive()) {
+			log.warn("Cannot process payment for inactive vendor: {}", vendor.getId());
+			return throwPaymentProcessingException(ERROR_CANNOT_PROCESS_PAYMENT);
 		}
 
-		VendorPayment payment = createVendorPayment(vendor.getId(), amount, paymentMethod);
+		VendorPayment payment = VendorPayment.create(vendor.getId(), amount, paymentMethod);
 		return paymentRepository.save(payment);
 	}
 
 	private Mono<VendorPayment> validateAndProcessPayment(VendorPayment payment) {
 		if (!VendorPayment.VendorPaymentStatus.PENDING.equals(payment.getStatus())) {
-			return throwPaymentProcessingException(PAYMENT_ALREADY_PROCESSED);
+			log.warn("Payment already processed: {}", payment.getId());
+			return throwPaymentProcessingException(ERROR_PAYMENT_ALREADY_PROCESSED);
 		}
 		return vendorRepository.findById(payment.getVendorId())
 				.switchIfEmpty(Mono.error(new VendorNotFoundException(ERROR_VENDOR_NOT_FOUND + payment.getVendorId())))
@@ -96,6 +115,7 @@ public class PaymentService {
 	}
 
 	private Mono<VendorPayment> processVendorPayment(Vendor vendor, VendorPayment payment) {
+		log.info("Processing payment for vendor: {}, amount: {}", vendor.getId(), payment.getAmount());
 		PaymentRequest request = createPaymentRequest(vendor, payment);
 
 		return paymentClient.processPayment(request)
@@ -108,6 +128,7 @@ public class PaymentService {
 			return paymentRepository.save(payment)
 					.doOnSuccess(savedPayment -> publishPaymentProcessedEvent(vendor, savedPayment));
 		} else {
+			log.warn("Payment processing failed: {}, reason: {}", payment.getId(), response.notes());
 			updatePaymentAsFailed(payment, response);
 			return paymentRepository.save(payment);
 		}
@@ -117,13 +138,11 @@ public class PaymentService {
 		payment.setStatus(VendorPayment.VendorPaymentStatus.PROCESSED);
 		payment.setReferenceId(response.referenceId());
 		payment.setPaymentDate(response.paymentDate());
-		payment.setUpdatedAt(LocalDateTime.now());
 	}
 
 	private void updatePaymentAsFailed(VendorPayment payment, PaymentResponse response) {
 		payment.setStatus(VendorPayment.VendorPaymentStatus.FAILED);
 		payment.setNotes(response.notes());
-		payment.setUpdatedAt(LocalDateTime.now());
 	}
 
 	private void publishPaymentProcessedEvent(Vendor vendor, VendorPayment payment) {
@@ -133,7 +152,7 @@ public class PaymentService {
 	}
 
 	private static Mono<VendorPayment> throwPaymentProcessingException(UUID paymentId) {
-		return Mono.error(new PaymentProcessingException(PAYMENT_NOT_FOUND + paymentId));
+		return Mono.error(new PaymentProcessingException(ERROR_PAYMENT_NOT_FOUND + paymentId));
 	}
 
 	private static Mono<VendorPayment> throwPaymentProcessingException(String message) {
