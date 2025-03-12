@@ -9,9 +9,9 @@ import java.util.List;
 import java.util.UUID;
 
 @Data
-@AllArgsConstructor
 @EqualsAndHashCode(callSuper = true)
 @Message("vendor.categories.assigned.event")
+@NoArgsConstructor
 public class VendorCategoriesAssignedEvent extends DomainEvent {
 	private UUID vendorId;
 	private List<CategoryAssignmentDto> categories;

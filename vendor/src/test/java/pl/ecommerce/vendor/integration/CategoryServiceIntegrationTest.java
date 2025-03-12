@@ -1,12 +1,11 @@
 package pl.ecommerce.vendor.integration;
 
-import org.apache.kafka.clients.consumer.ConsumerRecords;
 import org.junit.jupiter.api.*;
 import org.mockito.Mock;
 import org.mockito.Mockito;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.kafka.test.context.EmbeddedKafka;
-import org.springframework.kafka.test.utils.KafkaTestUtils;
+import org.springframework.test.context.ActiveProfiles;
+import pl.ecommerce.commons.event.vendor.VendorCategoriesAssignedEvent;
 import pl.ecommerce.commons.kafka.EventPublisher;
 import pl.ecommerce.vendor.api.dto.CategoryAssignmentRequest;
 import pl.ecommerce.vendor.domain.model.Category;
@@ -19,7 +18,6 @@ import pl.ecommerce.vendor.domain.service.VendorService;
 import pl.ecommerce.vendor.infrastructure.client.ProductServiceClient;
 import pl.ecommerce.vendor.infrastructure.exception.CategoryAssignmentException;
 import pl.ecommerce.vendor.infrastructure.exception.VendorNotFoundException;
-import pl.ecommerce.vendor.integration.helper.KafkaTopics;
 import pl.ecommerce.vendor.integration.helper.TestUtils;
 import reactor.core.publisher.Flux;
 import reactor.test.StepVerifier;
@@ -28,14 +26,14 @@ import javax.money.MonetaryAmount;
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.Mockito.when;
+import static org.testcontainers.shaded.org.awaitility.Awaitility.await;
 
-@EmbeddedKafka(partitions = 1, topics = {
-		"vendor.categories.assigned.event"
-})
+@ActiveProfiles("test")
 class CategoryServiceIntegrationTest extends BaseIntegrationTest {
 
 	@Autowired
@@ -60,12 +58,6 @@ class CategoryServiceIntegrationTest extends BaseIntegrationTest {
 	private Vendor testVendor;
 	private List<ProductServiceClient.CategoryResponse> categoryResponses;
 	private MonetaryAmount commissionRate;
-
-	@BeforeAll
-	static void setupClass() {
-		setupKafkaConsumer(KafkaTopics.CATEGORY_TOPICS);
-		waitForKafkaReady(KafkaTopics.CATEGORY_TOPICS);
-	}
 
 	@BeforeEach
 	void setupBeforeEach() {
@@ -93,10 +85,12 @@ class CategoryServiceIntegrationTest extends BaseIntegrationTest {
 
 	@Test
 	void assignCategories_WithValidData_ShouldAssignSuccessfully() {
+
+		ProductServiceClient.CategoryResponse categoryResponse = categoryResponses.getFirst();
 		Mockito.reset(productServiceClient);
 		when(productServiceClient.getCategories(Mockito.argThat(list ->
 				list.size() == 1 && list.contains(CATEGORY_ID_1))))
-				.thenReturn(Flux.just(categoryResponses.getFirst()));
+				.thenReturn(Flux.just(categoryResponse));
 
 		List<CategoryAssignmentRequest> requests = List.of(
 				new CategoryAssignmentRequest(CATEGORY_ID_1.toString(), commissionRate)
@@ -112,9 +106,21 @@ class CategoryServiceIntegrationTest extends BaseIntegrationTest {
 				})
 				.verifyComplete();
 
-		ConsumerRecords<String, String> records = KafkaTestUtils.getRecords(kafkaConsumer);
-		boolean eventReceived = records.records(KafkaTopics.CATEGORIES_ASSIGNED).iterator().hasNext();
-		assertTrue(eventReceived, "Expected VendorCategoriesAssignedEvent to be published.");
+		await().atMost(5, TimeUnit.SECONDS)
+				.until(() -> testEventListener.getEventCount(VendorCategoriesAssignedEvent.class) > 0);
+
+		StepVerifier.create(testEventListener.getCapturedEventsFlux(VendorCategoriesAssignedEvent.class).next())
+				.assertNext(vendorEvent -> {
+					var event = vendorEvent.getFirst();
+					var categoryAssignmentDto = event.getCategories().getFirst();
+					assertThat(event.getVendorId()).isEqualTo(VENDOR_ID);
+					assertEquals(categoryResponse.id(), categoryAssignmentDto.category().id());
+					assertEquals(categoryResponse.name(), categoryAssignmentDto.category().name());
+					assertEquals(categoryResponse.description(), categoryAssignmentDto.category().description());
+				})
+				.verifyComplete();
+
+		testEventListener.clearEvents();
 	}
 
 	@Test

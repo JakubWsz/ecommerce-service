@@ -59,7 +59,7 @@ public class CategoryAssignment extends BaseEntity {
 	}
 
 
-	public MonetaryAmount getCategoryCommissionRate() {
+	public Money getCategoryCommissionRate() {
 		if (commissionAmount == null || commissionCurrency == null) {
 			return null;
 		}

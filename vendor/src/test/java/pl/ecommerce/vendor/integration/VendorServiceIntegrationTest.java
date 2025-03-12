@@ -1,10 +1,8 @@
 package pl.ecommerce.vendor.integration;
 
-import org.apache.kafka.clients.consumer.ConsumerRecords;
 import org.junit.jupiter.api.*;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.kafka.test.context.EmbeddedKafka;
-import org.springframework.kafka.test.utils.KafkaTestUtils;
+import pl.ecommerce.commons.event.vendor.*;
 import pl.ecommerce.commons.kafka.EventPublisher;
 import pl.ecommerce.vendor.domain.model.Address;
 import pl.ecommerce.vendor.domain.model.Vendor;
@@ -14,22 +12,17 @@ import pl.ecommerce.vendor.infrastructure.exception.ValidationException;
 import pl.ecommerce.vendor.infrastructure.exception.VendorAlreadyExistsException;
 import pl.ecommerce.vendor.infrastructure.exception.VendorNotFoundException;
 import pl.ecommerce.vendor.integration.helper.KafkaTopics;
+import pl.ecommerce.vendor.integration.helper.TestEventListener;
 import pl.ecommerce.vendor.integration.helper.TestUtils;
 import reactor.test.StepVerifier;
 
+import java.util.Map;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.*;
 
-@EmbeddedKafka(partitions = 1, topics = {
-		"vendor.categories.assigned.event",
-		"vendor.payment.processed.event",
-		"vendor.registered.event",
-		"vendor.status.changed.event",
-		"vendor.updated.event",
-		"vendor.verification.completed.event"
-})
+@TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 class VendorServiceIntegrationTest extends BaseIntegrationTest {
 
 	@Autowired
@@ -38,17 +31,20 @@ class VendorServiceIntegrationTest extends BaseIntegrationTest {
 	@Autowired
 	private EventPublisher eventPublisher;
 
+	@Autowired
+	private TestEventListener testEventListener;
+
 	private VendorService vendorService;
 
 	private static final UUID VENDOR_ID = UUID.randomUUID();
 	private static final String VENDOR_EMAIL = "test.vendor@example.com";
 	private Vendor testVendor;
 
-	@BeforeAll
-	static void setupClass() {
-		setupKafkaConsumer(KafkaTopics.VENDOR_TOPICS);
-		waitForKafkaReady(KafkaTopics.VENDOR_TOPICS);
-	}
+//	@BeforeAll
+//	static void setupClass() {
+//		setupKafkaConsumer(KafkaTopics.VENDOR_TOPICS);
+//		waitForKafkaReady(KafkaTopics.VENDOR_TOPICS);
+//	}
 
 	@BeforeEach
 	void setupBeforeEach() {
@@ -57,7 +53,7 @@ class VendorServiceIntegrationTest extends BaseIntegrationTest {
 		testVendor = TestUtils.createTestVendor(VENDOR_ID, VENDOR_EMAIL);
 		vendorRepository.save(testVendor).block();
 
-		vendorService = new VendorService(vendorRepository,eventPublisher);
+		vendorService = new VendorService(vendorRepository, eventPublisher);
 	}
 
 	@Test
@@ -78,9 +74,15 @@ class VendorServiceIntegrationTest extends BaseIntegrationTest {
 		assertTrue(vendor.getActive());
 		assertThat(vendor.getVendorStatus()).isEqualTo(Vendor.VendorStatus.PENDING);
 
-		ConsumerRecords<String, String> records = KafkaTestUtils.getRecords(kafkaConsumer);
-		boolean eventReceived = records.records(KafkaTopics.VENDOR_REGISTERED).iterator().hasNext();
-		assertTrue(eventReceived, "Expected VendorRegisteredEvent to be published.");
+		var vendorEvents = waitForEvents(VendorRegisteredEvent.class,1000);
+		var vendorEvent = vendorEvents.getFirst();
+
+		assertThat(vendorEvents.size()).isEqualTo(1);
+		assertEquals(vendor.getEmail(), vendorEvent.getEmail());
+		assertEquals(vendor.getVendorStatus().name(), vendorEvent.getStatus());
+		assertEquals(vendor.getName(), vendorEvent.getName());
+
+		testEventListener.clearEvents();
 	}
 
 	@Test
@@ -173,9 +175,16 @@ class VendorServiceIntegrationTest extends BaseIntegrationTest {
 				})
 				.verifyComplete();
 
-		ConsumerRecords<String, String> records = KafkaTestUtils.getRecords(kafkaConsumer);
-		boolean eventReceived = records.records(KafkaTopics.VENDOR_UPDATED).iterator().hasNext();
-		assertTrue(eventReceived, "Expected VendorUpdatedEvent to be published.");
+		var vendorEvents = waitForEvents(VendorUpdatedEvent.class,1000);
+		var vendorEvent = vendorEvents.getFirst();
+
+		assertThat(vendorEvents.size()).isEqualTo(1);
+		assertEquals(VENDOR_ID, vendorEvent.getVendorId());
+		assertEquals("Updated Name", vendorEvent.getChanges().get("name"));
+		assertEquals("Updated Description", vendorEvent.getChanges().get("description"));
+		assertEquals("987654321", vendorEvent.getChanges().get("phone"));
+
+		testEventListener.clearEvents();
 	}
 
 	@Test
@@ -193,19 +202,28 @@ class VendorServiceIntegrationTest extends BaseIntegrationTest {
 				.businessAddress(newAddress)
 				.build();
 
-		StepVerifier.create(vendorService.updateVendor(VENDOR_ID, vendorUpdate))
-				.assertNext(vendor -> {
+		var vendor =vendorService.updateVendor(VENDOR_ID, vendorUpdate).block();
+
+
 					assertThat(vendor).isNotNull();
 					assertThat(vendor.getId()).isEqualTo(VENDOR_ID);
 					assertThat(vendor.getBusinessAddress()).isNotNull();
 					assertThat(vendor.getBusinessAddress().getStreet()).isEqualTo("New Street");
 					assertThat(vendor.getBusinessAddress().getCity()).isEqualTo("New City");
-				})
-				.verifyComplete();
 
-		ConsumerRecords<String, String> records = KafkaTestUtils.getRecords(kafkaConsumer);
-		boolean eventReceived = records.records(KafkaTopics.VENDOR_UPDATED).iterator().hasNext();
-		assertTrue(eventReceived, "Expected VendorUpdatedEvent to be published.");
+		var vendorEvents = waitForEvents(VendorUpdatedEvent.class,1000);
+		var vendorEvent = vendorEvents.getFirst();
+
+		assertThat(vendorEvents.size()).isEqualTo(1);
+		assertEquals(VENDOR_ID, vendorEvent.getVendorId());
+		@SuppressWarnings("unchecked")
+		Map<String, Object> businessAddress = (Map<String, Object>) vendorEvent.getChanges().get("businessAddress");
+
+		assertEquals("New Street", businessAddress.get("street"));
+		assertEquals("5", businessAddress.get("buildingNumber"));
+		assertEquals("54321", businessAddress.get("postalCode"));
+
+		testEventListener.clearEvents();
 	}
 
 	@Test
@@ -222,18 +240,20 @@ class VendorServiceIntegrationTest extends BaseIntegrationTest {
 
 	@Test
 	void updateVendorStatus_ExistingVendor_ShouldUpdateStatusSuccessfully() {
-		StepVerifier.create(vendorService.updateVendorStatus(VENDOR_ID, Vendor.VendorStatus.SUSPENDED, "Violation"))
-				.assertNext(vendor -> {
+	var vendor =	vendorService.updateVendorStatus(VENDOR_ID, Vendor.VendorStatus.SUSPENDED, "Violation").block();
+
 					assertThat(vendor).isNotNull();
 					assertThat(vendor.getId()).isEqualTo(VENDOR_ID);
 					assertThat(vendor.getVendorStatus()).isEqualTo(Vendor.VendorStatus.SUSPENDED);
 					assertThat(vendor.getStatusChangeReason()).isEqualTo("Violation");
-				})
-				.verifyComplete();
 
-		ConsumerRecords<String, String> records = KafkaTestUtils.getRecords(kafkaConsumer);
-		boolean eventReceived = records.records(KafkaTopics.VENDOR_STATUS_CHANGED).iterator().hasNext();
-		assertTrue(eventReceived, "Expected VendorStatusChangedEvent to be published.");
+		var vendorEvents = waitForEvents(VendorStatusChangedEvent.class,1000);
+		var vendorEvent = vendorEvents.getFirst();
+
+		assertThat(vendorEvents.size()).isEqualTo(1);
+		assertEquals(VENDOR_ID, vendorEvent.getVendorId());
+
+		testEventListener.clearEvents();
 	}
 
 	@Test
@@ -246,9 +266,15 @@ class VendorServiceIntegrationTest extends BaseIntegrationTest {
 				})
 				.verifyComplete();
 
-		ConsumerRecords<String, String> records = KafkaTestUtils.getRecords(kafkaConsumer);
-		boolean eventReceived = records.records(KafkaTopics.VENDOR_VERIFICATION_COMPLETED).iterator().hasNext();
-		assertTrue(eventReceived, "Expected VendorVerificationCompletedEvent to be published.");
+		var vendorEvents = waitForEvents(VendorVerificationCompletedEvent.class,1000);
+		var vendorEvent = vendorEvents.getFirst();
+
+		assertThat(vendorEvents.size()).isEqualTo(1);
+		assertEquals(VENDOR_ID, vendorEvent.getVendorId());
+		assertEquals(Vendor.VerificationStatus.VERIFIED.name(), vendorEvent.getVerificationStatus());
+		assertNotNull(vendorEvent.getVerificationTimestamp());
+
+		testEventListener.clearEvents();
 	}
 
 	@Test
@@ -261,10 +287,6 @@ class VendorServiceIntegrationTest extends BaseIntegrationTest {
 					assertThat(vendor.getActive()).isFalse();
 				})
 				.verifyComplete();
-
-		ConsumerRecords<String, String> records = KafkaTestUtils.getRecords(kafkaConsumer);
-		boolean eventReceived = records.records(KafkaTopics.VENDOR_STATUS_CHANGED).iterator().hasNext();
-		assertTrue(eventReceived, "Expected VendorStatusChangedEvent to be published.");
 	}
 
 	@Test

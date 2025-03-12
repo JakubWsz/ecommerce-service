@@ -1,8 +1,10 @@
 package pl.ecommerce.commons.dto;
 
 import lombok.Builder;
+import org.javamoney.moneta.Money;
 
 import javax.money.MonetaryAmount;
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.UUID;
 
@@ -16,7 +18,8 @@ public record CategoryAssignmentDto(
 		UUID vendorId,
 		CategoryDto category,
 		CategoryAssignmentStatusDto status,
-		MonetaryAmount categoryCommissionRate,
+		BigDecimal categoryCommissionRate,
+		String currencyUnit,
 		LocalDateTime assignedAt,
 		String statusChangeReason
 
@@ -24,6 +27,7 @@ public record CategoryAssignmentDto(
 	public enum CategoryAssignmentStatusDto {
 		ACTIVE, INACTIVE
 	}
+
 	@Builder
 	public record CategoryDto(
 			UUID id,

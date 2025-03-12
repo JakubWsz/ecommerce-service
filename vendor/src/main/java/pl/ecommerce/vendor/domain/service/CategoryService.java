@@ -169,7 +169,7 @@ public class CategoryService {
 				.doOnNext(savedAssignments -> {
 					log.info(LOG_OPERATION_COMPLETED, "All category assignments saved", "vendor", vendorId);
 					var categories = mapCategoryAssignments(assignments);
-					publishVendorCategoriesAssignedEvent(eventPublisher, vendorId, categories);
+					publishVendorCategoriesAssignedEvent(vendorId, categories);
 				})
 				.flatMapMany(Flux::fromIterable);
 	}
@@ -177,7 +177,7 @@ public class CategoryService {
 	private CategoryAssignment createCategoryAssignment(Vendor vendor, List<ProductServiceClient.CategoryResponse> categoryResponses, CategoryAssignmentRequest request) {
 		UUID catId = UUID.fromString(request.categoryId());
 		ProductServiceClient.CategoryResponse categoryResponse = findCategoryResponseById(categoryResponses, catId);
-		return CategoryAssignment.create(vendor.getId(),toCategory(categoryResponse),request.commissionRate());
+		return CategoryAssignment.create(vendor.getId(), toCategory(categoryResponse), request.commissionRate());
 	}
 
 	private static Category toCategory(ProductServiceClient.CategoryResponse categoryResponse) {
@@ -204,7 +204,8 @@ public class CategoryService {
 				.vendorId(categoryAssignment.getVendorId())
 				.category(mapCategory(categoryAssignment.getCategory()))
 				.status(CategoryAssignmentDto.CategoryAssignmentStatusDto.valueOf(categoryAssignment.getStatus().name()))
-				.categoryCommissionRate(categoryAssignment.getCategoryCommissionRate())
+				.categoryCommissionRate(categoryAssignment.getCategoryCommissionRate().getNumberStripped())
+				.currencyUnit(categoryAssignment.getCategoryCommissionRate().getCurrency().getCurrencyCode())
 				.assignedAt(categoryAssignment.getAssignedAt())
 				.statusChangeReason(categoryAssignment.getStatusChangeReason())
 				.build();
@@ -218,9 +219,9 @@ public class CategoryService {
 				.build();
 	}
 
-	public static void publishVendorCategoriesAssignedEvent(EventPublisher eventPublisher, UUID vendorId, List<CategoryAssignmentDto> categories) {
-		var event = createVendorCategoriesAssignedEvent(vendorId,categories);
-		log.info("Categories {}, assigned for vendor: {}",categories, vendorId);
+	public void publishVendorCategoriesAssignedEvent(UUID vendorId, List<CategoryAssignmentDto> categories) {
+		var event = createVendorCategoriesAssignedEvent(vendorId, categories);
+		log.info("Categories {}, assigned for vendor: {}", categories, vendorId);
 		eventPublisher.publish(event);
 	}
 

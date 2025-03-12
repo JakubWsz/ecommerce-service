@@ -70,7 +70,7 @@ public class VendorPayment extends BaseEntity {
 		return payment;
 	}
 
-	public MonetaryAmount getAmount() {
+	public Money getAmount() {
 		if (amount == null || currency == null) {
 			return null;
 		}

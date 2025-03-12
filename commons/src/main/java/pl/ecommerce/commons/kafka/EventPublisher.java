@@ -18,7 +18,7 @@ public class EventPublisher {
 
 	public void publish(Object event) {
 		if (!event.getClass().isAnnotationPresent(Message.class)) {
-			log.warn("⚠ Event {} does not have @Message annotation and will not be sent", event.getClass().getSimpleName());
+			log.warn("Event {} does not have @Message annotation and will not be sent", event.getClass().getSimpleName());
 			return;
 		}
 

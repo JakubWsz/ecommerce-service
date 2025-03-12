@@ -8,9 +8,9 @@ import java.time.LocalDateTime;
 import java.util.UUID;
 
 @Data
-@AllArgsConstructor
 @EqualsAndHashCode(callSuper = true)
 @Message("vendor.verification.completed.event")
+@NoArgsConstructor
 public class VendorVerificationCompletedEvent extends DomainEvent {
 	private UUID vendorId;
 	private String verificationStatus;

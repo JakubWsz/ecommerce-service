@@ -7,9 +7,9 @@ import pl.ecommerce.commons.event.Message;
 import java.util.UUID;
 
 @Data
-@AllArgsConstructor
 @EqualsAndHashCode(callSuper = true)
 @Message("vendor.status.changed.event")
+@NoArgsConstructor
 public class VendorStatusChangedEvent extends DomainEvent {
 	private UUID vendorId;
 	private String oldStatus;

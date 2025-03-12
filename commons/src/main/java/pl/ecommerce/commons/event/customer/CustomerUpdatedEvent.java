@@ -8,9 +8,9 @@ import java.util.Map;
 import java.util.UUID;
 
 @Data
-@AllArgsConstructor
 @EqualsAndHashCode(callSuper = true)
 @Message("customer.updated.event")
+@NoArgsConstructor
 public class CustomerUpdatedEvent extends DomainEvent {
 	private UUID customerId;
 	private Map<String, Object> changes;

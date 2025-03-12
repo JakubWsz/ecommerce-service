@@ -14,15 +14,23 @@ spring:
 
   # Kafka configuration
   kafka:
-    bootstrap-servers: ${KAFKA_SERVERS:localhost:9092}
     consumer:
       group-id: ${spring.application.name}
       auto-offset-reset: earliest
       key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
       value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+    listener:
+      ack-mode: MANUAL
     producer:
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
       value-serializer: org.apache.kafka.common.serialization.StringSerializer
+
+event:
+  listener:
+    group-id: vendor-event-listener
+    topics:
+      - product.created.event
+      - product.updated.event
 
 # Server settings
 server:
@@ -153,6 +161,17 @@ logging:
   level:
     pl.ecommerce.vendor: DEBUG
     org.springframework.test: DEBUG
+
+event:
+  listener:
+    group-id: test-vendor-event-listener
+    topics:
+      - vendor.categories.assigned.event
+      - vendor.payment.processed.event
+      - vendor.registered.event
+      - vendor.status.changed.event
+      - vendor.updated.event
+      - vendor.verification.completed.event
 
 ---
 # Prod profile

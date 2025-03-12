@@ -1,11 +1,11 @@
 package pl.ecommerce.vendor.integration;
 
-import org.apache.kafka.clients.consumer.ConsumerRecords;
+import org.javamoney.moneta.Money;
 import org.junit.jupiter.api.*;
 import org.mockito.Mock;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.kafka.test.context.EmbeddedKafka;
-import org.springframework.kafka.test.utils.KafkaTestUtils;
+import org.springframework.test.context.ActiveProfiles;
+import pl.ecommerce.commons.event.vendor.VendorPaymentProcessedEvent;
 import pl.ecommerce.commons.kafka.EventPublisher;
 import pl.ecommerce.vendor.api.dto.PaymentRequest;
 import pl.ecommerce.vendor.api.dto.PaymentResponse;
@@ -17,7 +17,7 @@ import pl.ecommerce.vendor.domain.service.PaymentService;
 import pl.ecommerce.vendor.infrastructure.client.PaymentClient;
 import pl.ecommerce.vendor.infrastructure.exception.PaymentProcessingException;
 import pl.ecommerce.vendor.infrastructure.exception.VendorNotFoundException;
-import pl.ecommerce.vendor.integration.helper.KafkaTopics;
+import pl.ecommerce.vendor.integration.helper.TestEventListener;
 import pl.ecommerce.vendor.integration.helper.TestUtils;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
@@ -27,13 +27,12 @@ import java.time.LocalDateTime;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 
-@EmbeddedKafka(partitions = 1, topics = {
-		"vendor.payment.processed.event"
-})
+@TestMethodOrder(MethodOrderer.OrderAnnotation.class)
+@ActiveProfiles("test")
 class PaymentServiceIntegrationTest extends BaseIntegrationTest {
 
 	@Autowired
@@ -45,6 +44,9 @@ class PaymentServiceIntegrationTest extends BaseIntegrationTest {
 	@Autowired
 	private EventPublisher eventPublisher;
 
+	@Autowired
+	private TestEventListener testEventListener;
+
 	@Mock
 	private PaymentClient paymentClient;
 
@@ -55,19 +57,13 @@ class PaymentServiceIntegrationTest extends BaseIntegrationTest {
 	private static final String PAYMENT_METHOD = "BANK_TRANSFER";
 	private Vendor testVendor;
 	private VendorPayment testPayment;
-	private MonetaryAmount amount;
-
-	@BeforeAll
-	static void setupClass() {
-		setupKafkaConsumer(KafkaTopics.PAYMENT_TOPICS);
-		waitForKafkaReady(KafkaTopics.PAYMENT_TOPICS);
-	}
+	private Money amount;
 
 	@BeforeEach
 	void setupBeforeEach() {
 		TestUtils.cleanRepositories(vendorRepository, paymentRepository, null, null);
 
-		amount = TestUtils.createMonetaryAmount(100.00, "USD");
+		amount = Money.of(100.00, "USD");
 
 		testVendor = TestUtils.createTestVendor(VENDOR_ID, "test.vendor@example.com");
 
@@ -80,6 +76,7 @@ class PaymentServiceIntegrationTest extends BaseIntegrationTest {
 	}
 
 	@Test
+	@Order(1)
 	void createPayment_WithValidData_ShouldCreatePaymentSuccessfully() {
 		MonetaryAmount paymentAmount = TestUtils.createMonetaryAmount(250.00, "USD");
 
@@ -96,6 +93,7 @@ class PaymentServiceIntegrationTest extends BaseIntegrationTest {
 	}
 
 	@Test
+	@Order(2)
 	void createPayment_WithInactiveVendor_ShouldFail() {
 		testVendor.setActive(false);
 		vendorRepository.save(testVendor).block();
@@ -107,6 +105,7 @@ class PaymentServiceIntegrationTest extends BaseIntegrationTest {
 	}
 
 	@Test
+	@Order(3)
 	void createPayment_WithNonExistingVendor_ShouldFail() {
 		UUID nonExistingId = UUID.randomUUID();
 
@@ -116,6 +115,7 @@ class PaymentServiceIntegrationTest extends BaseIntegrationTest {
 	}
 
 	@Test
+	@Order(4)
 	void processPayment_WithSuccessfulResponse_ShouldProcessPaymentSuccessfully() {
 		LocalDateTime now = LocalDateTime.now();
 		UUID referenceId = UUID.randomUUID();
@@ -143,12 +143,20 @@ class PaymentServiceIntegrationTest extends BaseIntegrationTest {
 				})
 				.verifyComplete();
 
-		ConsumerRecords<String, String> records = KafkaTestUtils.getRecords(kafkaConsumer);
-		boolean eventReceived = records.records(KafkaTopics.PAYMENT_PROCESSED).iterator().hasNext();
-		assertTrue(eventReceived, "Expected VendorPaymentProcessedEvent to be published.");
+		var vendorEvents = waitForEvents(VendorPaymentProcessedEvent.class,1000);
+		var vendorEvent = vendorEvents.getFirst();
+
+		assertThat(vendorEvents.size()).isEqualTo(1);
+		assertEquals(VENDOR_ID, vendorEvent.getVendorId());
+		assertEquals(PAYMENT_ID, vendorEvent.getPaymentId());
+		assertEquals(amount.getCurrency().getCurrencyCode(), vendorEvent.getCurrencyUnit());
+		assertEquals(amount.getNumberStripped(), vendorEvent.getPrice());
+
+		testEventListener.clearEvents();
 	}
 
 	@Test
+	@Order(5)
 	void processPayment_WithFailedResponse_ShouldMarkPaymentAsFailed() {
 		PaymentResponse failedResponse = PaymentResponse.builder()
 				.id(PAYMENT_ID)
@@ -173,6 +181,7 @@ class PaymentServiceIntegrationTest extends BaseIntegrationTest {
 	}
 
 	@Test
+	@Order(6)
 	void processPayment_WithAlreadyProcessedPayment_ShouldFail() {
 		testPayment.setStatus(VendorPayment.VendorPaymentStatus.PROCESSED);
 		paymentRepository.save(testPayment).block();
@@ -184,6 +193,7 @@ class PaymentServiceIntegrationTest extends BaseIntegrationTest {
 	}
 
 	@Test
+	@Order(7)
 	void processPayment_WithNonExistingPayment_ShouldFail() {
 		UUID nonExistingId = UUID.randomUUID();
 
@@ -193,6 +203,7 @@ class PaymentServiceIntegrationTest extends BaseIntegrationTest {
 	}
 
 	@Test
+	@Order(8)
 	void getPayment_ExistingPayment_ShouldReturnPayment() {
 		StepVerifier.create(paymentService.getPayment(PAYMENT_ID))
 				.assertNext(payment -> {
@@ -204,6 +215,7 @@ class PaymentServiceIntegrationTest extends BaseIntegrationTest {
 	}
 
 	@Test
+	@Order(9)
 	void getPayment_NonExistingPayment_ShouldFail() {
 		UUID nonExistingId = UUID.randomUUID();
 
@@ -213,6 +225,7 @@ class PaymentServiceIntegrationTest extends BaseIntegrationTest {
 	}
 
 	@Test
+	@Order(9)
 	void getPayments_ExistingVendor_ShouldReturnAllPayments() {
 		VendorPayment secondPayment = TestUtils.createTestPayment(UUID.randomUUID(), VENDOR_ID, amount, PAYMENT_METHOD);
 		paymentRepository.save(secondPayment).block();
@@ -227,6 +240,7 @@ class PaymentServiceIntegrationTest extends BaseIntegrationTest {
 	}
 
 	@Test
+	@Order(10)
 	void getPaymentsByStatus_ShouldReturnFilteredPayments() {
 		VendorPayment processedPayment = TestUtils.createTestPayment(UUID.randomUUID(), VENDOR_ID, amount, PAYMENT_METHOD);
 		processedPayment.setStatus(VendorPayment.VendorPaymentStatus.PROCESSED);
@@ -250,6 +264,7 @@ class PaymentServiceIntegrationTest extends BaseIntegrationTest {
 	}
 
 	@Test
+	@Order(11)
 	void getPaymentsByDateRange_ShouldReturnFilteredPayments() {
 		LocalDateTime now = LocalDateTime.now();
 		LocalDateTime yesterday = now.minusDays(1);
@@ -275,4 +290,5 @@ class PaymentServiceIntegrationTest extends BaseIntegrationTest {
 				.assertNext(payments -> assertThat(payments).hasSize(2))
 				.verifyComplete();
 	}
+
 }

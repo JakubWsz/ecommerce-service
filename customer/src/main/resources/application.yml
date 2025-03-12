@@ -31,6 +31,8 @@ spring:
       auto-offset-reset: earliest
       key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
       value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+    listener:
+      ack-mode: MANUAL
     producer:
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
       value-serializer: org.apache.kafka.common.serialization.StringSerializer
@@ -170,13 +172,12 @@ spring:
 
   # MongoDB configuration for tests
   data:
-    data:
-      mongodb:
-        uri: mongodb://customer_user:customer_password@localhost:27017
-        database: customer_test
-        field-naming-strategy: org.springframework.data.mapping.model.CamelCaseAbbreviatingFieldNamingStrategy
-        auto-index-creation: true
-        dot-replacement: _
+    mongodb:
+      uri: mongodb://customer_user:customer_password@localhost:27017
+      database: customer_test
+      field-naming-strategy: org.springframework.data.mapping.model.CamelCaseAbbreviatingFieldNamingStrategy
+      auto-index-creation: true
+      dot-replacement: _
     redis:
       password: redis
       host: localhost
@@ -185,6 +186,14 @@ spring:
   # Kafka configuration for tests
   kafka:
     bootstrap-servers: localhost:29092
+
+event:
+  listener:
+    group-id: test-event-listener
+    topics:
+      - customer.registered.event
+      - customer.updated.event
+      - customer.deleted.event
 
 # Logging configuration for tests
 logging:

@@ -2,16 +2,13 @@ package pl.ecommerce.vendor.infrastructure;
 
 import pl.ecommerce.commons.dto.CategoryAssignmentDto;
 import pl.ecommerce.commons.event.vendor.*;
-import pl.ecommerce.vendor.domain.model.CategoryAssignment;
 import pl.ecommerce.vendor.domain.model.Vendor;
 import pl.ecommerce.vendor.domain.model.VendorPayment;
 
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.UUID;
-import java.util.stream.Collectors;
 
 public final class VendorEventUtils {
 	private VendorEventUtils() {
@@ -22,7 +19,8 @@ public final class VendorEventUtils {
 				.correlationId(UUID.randomUUID())
 				.vendorId(vendor.getId())
 				.paymentId(savedPayment.getId())
-				.amount(savedPayment.getAmount())
+				.price(savedPayment.getAmount().getNumberStripped())
+				.currencyUnit(savedPayment.getAmount().getCurrency().getCurrencyCode())
 				.paymentDate(savedPayment.getPaymentDate())
 				.build();
 	}

@@ -7,9 +7,9 @@ import pl.ecommerce.commons.event.Message;
 import java.util.UUID;
 
 @Data
-@AllArgsConstructor
 @EqualsAndHashCode(callSuper = true)
 @Message("vendor.registered.event")
+@NoArgsConstructor
 public class VendorRegisteredEvent extends DomainEvent {
 	private UUID vendorId;
 	private String name;

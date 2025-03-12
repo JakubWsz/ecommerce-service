@@ -1,11 +1,9 @@
 package pl.ecommerce.vendor.integration;
 
-import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.junit.jupiter.api.*;
 import org.mockito.MockitoAnnotations;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.kafka.test.context.EmbeddedKafka;
-import org.springframework.kafka.test.utils.KafkaTestUtils;
+import pl.ecommerce.commons.event.vendor.VendorVerificationCompletedEvent;
 import pl.ecommerce.vendor.domain.model.VerificationDocument;
 import pl.ecommerce.vendor.domain.model.Vendor;
 import pl.ecommerce.vendor.domain.repository.VerificationDocumentRepository;
@@ -16,15 +14,16 @@ import pl.ecommerce.vendor.infrastructure.exception.DocumentNotFoundException;
 import pl.ecommerce.vendor.infrastructure.exception.ValidationException;
 import pl.ecommerce.vendor.infrastructure.exception.VendorNotFoundException;
 import pl.ecommerce.vendor.integration.helper.KafkaTopics;
+import pl.ecommerce.vendor.integration.helper.TestEventListener;
 import pl.ecommerce.vendor.integration.helper.TestUtils;
 import reactor.test.StepVerifier;
 
-import java.time.Duration;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 
-@EmbeddedKafka(partitions = 1, topics = {"vendor.verification.completed.event"})
 class VerificationServiceIntegrationTest extends BaseIntegrationTest {
 
 	@Autowired
@@ -32,6 +31,9 @@ class VerificationServiceIntegrationTest extends BaseIntegrationTest {
 
 	@Autowired
 	private VendorRepository vendorRepository;
+
+	@Autowired
+	private TestEventListener testEventListener;
 
 	@Autowired
 	private VendorService vendorService;
@@ -44,11 +46,11 @@ class VerificationServiceIntegrationTest extends BaseIntegrationTest {
 	private Vendor testVendor;
 	private VerificationDocument testDocument;
 
-	@BeforeAll
-	static void setupClass() {
-		setupKafkaConsumer(KafkaTopics.VERIFICATION_TOPICS);
-		waitForKafkaReady(KafkaTopics.VERIFICATION_TOPICS);
-	}
+//	@BeforeAll
+//	static void setupClass() {
+//		setupKafkaConsumer(KafkaTopics.VERIFICATION_TOPICS);
+//		waitForKafkaReady(KafkaTopics.VERIFICATION_TOPICS);
+//	}
 
 	@BeforeEach
 	void setupBeforeEach() {
@@ -152,11 +154,15 @@ class VerificationServiceIntegrationTest extends BaseIntegrationTest {
 				})
 				.verifyComplete();
 
-		ConsumerRecord<String, String> record = KafkaTestUtils.getSingleRecord(kafkaConsumer,
-				KafkaTopics.VENDOR_VERIFICATION_COMPLETED, Duration.ofSeconds(5));
+		var vendorEvents = waitForEvents(VendorVerificationCompletedEvent.class,1000);
+		var vendorEvent = vendorEvents.getFirst();
 
-		assertThat(record).isNotNull();
-		assertThat(record.value()).contains("VendorVerificationCompletedEvent");
+		assertThat(vendorEvents.size()).isEqualTo(1);
+		assertEquals(VENDOR_ID, vendorEvent.getVendorId());
+		assertEquals(Vendor.VerificationStatus.VERIFIED.name(), vendorEvent.getVerificationStatus());
+		assertNotNull(vendorEvent.getVerificationTimestamp());
+
+		testEventListener.clearEvents();
 	}
 
 	@Test

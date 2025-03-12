@@ -1,5 +1,6 @@
 package pl.ecommerce.vendor.domain.service;
 
+import org.javamoney.moneta.Money;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -20,8 +21,6 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
 
-import javax.money.Monetary;
-import javax.money.MonetaryAmount;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.UUID;
@@ -55,7 +54,7 @@ public class PaymentServiceTest {
 	private VendorPayment payment;
 	private UUID vendorId;
 	private UUID paymentId;
-	private MonetaryAmount amount;
+	private Money amount;
 	private String paymentMethod;
 	private LocalDateTime now;
 
@@ -67,10 +66,7 @@ public class PaymentServiceTest {
 		paymentMethod = "BANK_TRANSFER";
 
 		// Initialize monetary amount
-		amount = Monetary.getDefaultAmountFactory()
-				.setCurrency("USD")
-				.setNumber(100.00)
-				.create();
+		amount = Money.of(100.00,"USD");
 
 		vendor = Vendor.builder()
 				.id(vendorId)
@@ -214,7 +210,8 @@ public class PaymentServiceTest {
 		VendorPaymentProcessedEvent event = paymentProcessedEventCaptor.getValue();
 		assertEquals(vendorId, event.getVendorId());
 		assertEquals(paymentId, event.getPaymentId());
-		assertEquals(amount.toString(), event.getAmount().toString());
+		assertEquals(amount.getNumberStripped(), event.getPrice());
+		assertEquals(amount.getCurrency().getCurrencyCode(), event.getCurrencyUnit());
 	}
 
 	@Test

@@ -3,8 +3,6 @@ package pl.ecommerce.customer.integration;
 import org.apache.kafka.clients.admin.AdminClient;
 import org.apache.kafka.clients.admin.AdminClientConfig;
 import org.apache.kafka.clients.admin.NewTopic;
-import org.apache.kafka.clients.consumer.ConsumerConfig;
-import org.apache.kafka.clients.consumer.ConsumerRecords;
 import org.apache.kafka.clients.consumer.KafkaConsumer;
 import org.apache.kafka.common.errors.TopicExistsException;
 import org.junit.jupiter.api.AfterAll;
@@ -13,13 +11,10 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
-import org.apache.kafka.common.serialization.StringDeserializer;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.data.mongodb.core.ReactiveMongoTemplate;
-import org.springframework.kafka.test.context.EmbeddedKafka;
-import org.springframework.kafka.test.utils.KafkaTestUtils;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
@@ -29,17 +24,17 @@ import org.testcontainers.containers.MongoDBContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.utility.DockerImageName;
+import pl.ecommerce.commons.event.customer.CustomerDeletedEvent;
 import pl.ecommerce.commons.event.customer.CustomerRegisteredEvent;
 import pl.ecommerce.commons.event.customer.CustomerUpdatedEvent;
-import pl.ecommerce.commons.event.customer.CustomerDeletedEvent;
 import pl.ecommerce.commons.kafka.EventPublisher;
+import pl.ecommerce.customer.TestEventListener;
 import pl.ecommerce.customer.domain.model.*;
 import pl.ecommerce.customer.domain.repository.CustomerRepository;
 import pl.ecommerce.customer.domain.repository.CustomerRepositoryMongo;
 import pl.ecommerce.customer.domain.service.CustomerService;
 import pl.ecommerce.customer.infrastructure.client.GeolocationClient;
 import pl.ecommerce.customer.infrastructure.client.dto.GeoLocationResponse;
-import pl.ecommerce.customer.infrastructure.exception.CustomerAlreadyExistsException;
 import pl.ecommerce.customer.infrastructure.exception.CustomerNotFoundException;
 import pl.ecommerce.customer.infrastructure.exception.GdprConsentRequiredException;
 import reactor.core.publisher.Mono;
@@ -48,16 +43,17 @@ import reactor.test.StepVerifier;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.*;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
+import static org.testcontainers.shaded.org.awaitility.Awaitility.await;
 
 @SpringBootTest
 @Testcontainers
 @ExtendWith(MockitoExtension.class)
-@EmbeddedKafka(partitions = 1, topics = {"customer-events"})
 @ActiveProfiles("test")
 public class CustomerServiceIntegrationTest {
 
@@ -105,6 +101,9 @@ public class CustomerServiceIntegrationTest {
 	private GeolocationClient geolocationClient;
 
 	@Autowired
+	private TestEventListener testEventListener;
+
+	@Autowired
 	private EventPublisher eventPublisher;
 
 	@Autowired
@@ -142,7 +141,6 @@ public class CustomerServiceIntegrationTest {
 		template.createCollection(Customer.class).block();
 		customerRepository = new CustomerRepositoryMongo(template);
 		customerService = new CustomerService(customerRepository, geolocationClient, eventPublisher);
-		consumer.poll(Duration.ofMillis(100));
 	}
 
 	@BeforeAll
@@ -151,7 +149,6 @@ public class CustomerServiceIntegrationTest {
 		KAFKA_CONTAINER.start();
 
 		waitForKafkaReady();
-		setupKafkaConsumer();
 	}
 
 	@AfterAll
@@ -178,9 +175,14 @@ public class CustomerServiceIntegrationTest {
 				})
 				.verifyComplete();
 
-		ConsumerRecords<String, String> records = KafkaTestUtils.getRecords(consumer);
-		boolean eventReceived = records.records("customer.deleted.event").iterator().hasNext();
-		assertTrue(eventReceived, "Expected CustomerDeletedEvent to be published");
+		var deletedEvents = testEventListener.getCapturedEvents(CustomerDeletedEvent.class);
+		var deletedEvent = deletedEvents.getFirst();
+		assertThat(deletedEvents.size()).isEqualTo(1);
+		assertEquals(CUSTOMER_ID, deletedEvent.getCustomerId());
+		assertEquals(CUSTOMER_EMAIL, deletedEvent.getEmail());
+		assertEquals(testCustomer.getPersonalData().getLastName(), deletedEvent.getLastName());
+		assertEquals(testCustomer.getPersonalData().getFirstName(), deletedEvent.getFirstName());
+		testEventListener.clearEvents();
 	}
 
 	@Test
@@ -198,7 +200,6 @@ public class CustomerServiceIntegrationTest {
 		when(geolocationClient.getLocationByIp(ipAddress)).thenReturn(Mono.just(geoResponse));
 
 		PersonalData personalData = new PersonalData("jane.doe@example.com", "Jane", "Doe", "987654321");
-		LocalDateTime now = LocalDateTime.now();
 		Customer newCustomer = new Customer(
 				false,
 				null,
@@ -227,16 +228,25 @@ public class CustomerServiceIntegrationTest {
 				})
 				.verifyComplete();
 
-		ConsumerRecords<String, String> records = KafkaTestUtils.getRecords(consumer);
-		boolean eventReceived = records.records("customer.registered.event").iterator().hasNext();
-		assertTrue(eventReceived, "Expected CustomerRegisteredEvent to be published");
+		await().atMost(5, TimeUnit.SECONDS)
+				.until(() -> testEventListener.getEventCount(CustomerRegisteredEvent.class) > 0);
+
+		List<CustomerRegisteredEvent> registeredEvents = testEventListener.getCapturedEvents(CustomerRegisteredEvent.class);
+
+		var registeredEvent = registeredEvents.getFirst();
+		assertThat(registeredEvents.size()).isEqualTo(1);
+		assertEquals(newCustomer.getId(), registeredEvent.getCustomerId());
+		assertEquals(newCustomer.getPersonalData().getEmail(), registeredEvent.getEmail());
+		assertEquals(newCustomer.getPersonalData().getLastName(), registeredEvent.getLastName());
+		assertEquals(newCustomer.getPersonalData().getFirstName(), registeredEvent.getFirstName());
+		testEventListener.clearEvents();
+
 		verify(geolocationClient, times(1)).getLocationByIp(ipAddress);
 	}
 
 	@Test
 	void registerCustomer_WithoutGdprConsent_ShouldFail() {
 		PersonalData personalData = new PersonalData("test@example.com", "Test", "User", "123123123");
-		LocalDateTime now = LocalDateTime.now();
 		Customer invalidCustomer = new Customer(
 				false,
 				null,
@@ -256,7 +266,7 @@ public class CustomerServiceIntegrationTest {
 
 		Exception exception = null;
 		try {
-			var c = customerService.registerCustomer(invalidCustomer, "127.0.0.1").block();
+			customerService.registerCustomer(invalidCustomer, "127.0.0.1").block();
 
 		}catch (Exception e){
 			exception =e;
@@ -325,7 +335,6 @@ public class CustomerServiceIntegrationTest {
 		customerRepository.saveCustomer(testCustomer).block();
 
 		PersonalData updatedPersonalData = new PersonalData(CUSTOMER_EMAIL, "John", "Updated", "999888777");
-		LocalDateTime now = LocalDateTime.now();
 		Customer customerUpdate = new Customer(
 				false,
 				null,
@@ -352,9 +361,15 @@ public class CustomerServiceIntegrationTest {
 				})
 				.verifyComplete();
 
-		ConsumerRecords<String, String> records = KafkaTestUtils.getRecords(consumer);
-		boolean eventReceived = records.records("customer.updated.event").iterator().hasNext();
-		assertTrue(eventReceived, "Expected CustomerUpdatedEvent to be published");
+		await().atMost(5, TimeUnit.SECONDS)
+				.until(() -> testEventListener.getEventCount(CustomerUpdatedEvent.class) > 0);
+
+		List<CustomerUpdatedEvent> customerUpdatedEvents = testEventListener.getCapturedEvents(CustomerUpdatedEvent.class);
+
+		var updatedEvent = customerUpdatedEvents.getFirst();
+		assertThat(customerUpdatedEvents.size()).isEqualTo(1);
+		assertEquals(CUSTOMER_ID, updatedEvent.getCustomerId());
+		testEventListener.clearEvents();
 	}
 
 	@Test
@@ -388,9 +403,16 @@ public class CustomerServiceIntegrationTest {
 				})
 				.verifyComplete();
 
-		ConsumerRecords<String, String> records = KafkaTestUtils.getRecords(consumer);
-		boolean eventReceived = records.records("customer.updated.event").iterator().hasNext();
-		assertTrue(eventReceived, "Expected CustomerUpdatedEvent to be published");
+
+		await().atMost(5, TimeUnit.SECONDS)
+				.until(() -> testEventListener.getEventCount(CustomerUpdatedEvent.class) > 0);
+
+		List<CustomerUpdatedEvent> customerUpdatedEvents = testEventListener.getCapturedEvents(CustomerUpdatedEvent.class);
+
+		var updatedEvent = customerUpdatedEvents.getFirst();
+		assertThat(customerUpdatedEvents.size()).isEqualTo(1);
+		assertEquals(CUSTOMER_ID, updatedEvent.getCustomerId());
+		testEventListener.clearEvents();
 	}
 
 	@Test
@@ -473,24 +495,5 @@ public class CustomerServiceIntegrationTest {
 		Properties props = new Properties();
 		props.put(AdminClientConfig.BOOTSTRAP_SERVERS_CONFIG, KAFKA_CONTAINER.getBootstrapServers());
 		return AdminClient.create(props);
-	}
-
-	private static void setupKafkaConsumer() {
-		Properties props = new Properties();
-		props.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, KAFKA_CONTAINER.getBootstrapServers());
-		props.put(ConsumerConfig.GROUP_ID_CONFIG, "test-group-" + UUID.randomUUID());
-		props.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class.getName());
-		props.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class.getName());
-		props.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest");
-		props.put(ConsumerConfig.SESSION_TIMEOUT_MS_CONFIG, "10000");
-		props.put(ConsumerConfig.HEARTBEAT_INTERVAL_MS_CONFIG, "3000");
-
-		consumer = new KafkaConsumer<>(props);
-		consumer.subscribe(Arrays.asList(TOPICS));
-
-		try {
-			consumer.poll(Duration.ofMillis(100));
-		} catch (Exception e) {
-		}
 	}
 }
