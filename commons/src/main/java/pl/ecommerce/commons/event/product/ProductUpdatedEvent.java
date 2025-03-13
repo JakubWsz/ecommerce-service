@@ -8,6 +8,7 @@ import pl.ecommerce.commons.event.DomainEvent;
 import pl.ecommerce.commons.event.Message;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
@@ -18,10 +19,8 @@ import java.util.UUID;
 @EqualsAndHashCode(callSuper = true)
 @Message("product.updated.event")
 @NoArgsConstructor
-public class ProductUpdatedEvent extends DomainEvent {
+public class ProductUpdatedEvent extends ProductEvent {
 
-	private UUID productId;
-	private UUID vendorId;
 	private String productName;
 	private String description;
 	private BigDecimal price;
@@ -36,7 +35,6 @@ public class ProductUpdatedEvent extends DomainEvent {
 	@JsonCreator
 	@Builder
 	public ProductUpdatedEvent(
-			@JsonProperty("correlationId") UUID correlationId,
 			@JsonProperty("productId") UUID productId,
 			@JsonProperty("vendorId") UUID vendorId,
 			@JsonProperty("productName") String productName,
@@ -48,10 +46,10 @@ public class ProductUpdatedEvent extends DomainEvent {
 			@JsonProperty("attributes") Map<String, String> attributes,
 			@JsonProperty("updatedAt") LocalDateTime updatedAt,
 			@JsonProperty("images") List<String> images,
-			@JsonProperty("changedFields") Map<String, Object> changedFields) {
-		super(correlationId);
-		this.productId = productId;
-		this.vendorId = vendorId;
+			@JsonProperty("changedFields") Map<String, Object> changedFields,
+			int version,
+			Instant timestamp) {
+		super(productId, version, timestamp,vendorId);
 		this.productName = productName;
 		this.description = description;
 		this.price = price;

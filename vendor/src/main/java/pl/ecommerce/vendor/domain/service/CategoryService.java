@@ -4,11 +4,10 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import pl.ecommerce.commons.dto.CategoryAssignmentDto;
+import pl.ecommerce.commons.model.CategoryAssignment;
 import pl.ecommerce.commons.kafka.EventPublisher;
 import pl.ecommerce.vendor.api.dto.CategoryAssignmentRequest;
 import pl.ecommerce.vendor.domain.model.Category;
-import pl.ecommerce.vendor.domain.model.CategoryAssignment;
 import pl.ecommerce.vendor.domain.model.Vendor;
 import pl.ecommerce.vendor.domain.repository.CategoryAssignmentRepository;
 import pl.ecommerce.vendor.infrastructure.client.ProductServiceClient;
@@ -36,7 +35,7 @@ public class CategoryService {
 	private final EventPublisher eventPublisher;
 
 	@Transactional
-	public Flux<CategoryAssignment> assignCategories(UUID vendorId, List<CategoryAssignmentRequest> request) {
+	public Flux<pl.ecommerce.vendor.domain.model.CategoryAssignment> assignCategories(UUID vendorId, List<CategoryAssignmentRequest> request) {
 		log.info(LOG_OPERATION_STARTED, "Category assignment", "vendor", vendorId);
 
 		return vendorService.getVendorById(vendorId)
@@ -46,7 +45,7 @@ public class CategoryService {
 				.doOnError(e -> log.error(LOG_ERROR, "category assignment", e.getMessage(), e));
 	}
 
-	public Flux<CategoryAssignment> getVendorCategories(UUID vendorId) {
+	public Flux<pl.ecommerce.vendor.domain.model.CategoryAssignment> getVendorCategories(UUID vendorId) {
 		log.debug(LOG_OPERATION_STARTED, "Fetching categories", "vendor", vendorId);
 
 		return vendorService.getVendorById(vendorId)
@@ -55,19 +54,19 @@ public class CategoryService {
 				.doOnComplete(() -> log.debug(LOG_OPERATION_COMPLETED, "Categories fetched", "vendor", vendorId));
 	}
 
-	public Flux<CategoryAssignment> getVendorActiveCategories(UUID vendorId) {
+	public Flux<pl.ecommerce.vendor.domain.model.CategoryAssignment> getVendorActiveCategories(UUID vendorId) {
 		log.debug(LOG_OPERATION_STARTED, "Fetching active categories", "vendor", vendorId);
 
 		return vendorService.getVendorById(vendorId)
 				.switchIfEmpty(Mono.error(new VendorNotFoundException(ERROR_VENDOR_NOT_FOUND + vendorId)))
 				.thenMany(categoryAssignmentRepository
-						.findByVendorIdAndStatus(vendorId, CategoryAssignment.CategoryAssignmentStatus.ACTIVE))
+						.findByVendorIdAndStatus(vendorId, pl.ecommerce.vendor.domain.model.CategoryAssignment.CategoryAssignmentStatus.ACTIVE))
 				.doOnComplete(() -> log.debug(LOG_OPERATION_COMPLETED, "Active categories fetched", "vendor", vendorId));
 	}
 
 	@Transactional
-	public Mono<CategoryAssignment> updateCategoryStatus(UUID vendorId, UUID categoryId,
-														 CategoryAssignment.CategoryAssignmentStatus status) {
+	public Mono<pl.ecommerce.vendor.domain.model.CategoryAssignment> updateCategoryStatus(UUID vendorId, UUID categoryId,
+																						  pl.ecommerce.vendor.domain.model.CategoryAssignment.CategoryAssignmentStatus status) {
 		log.info(LOG_OPERATION_STARTED, "Category status update", "vendor", vendorId);
 
 		return handleErrorIfTrue(isInvalidStatus(status))
@@ -87,7 +86,7 @@ public class CategoryService {
 				.doOnSuccess(v -> log.info(LOG_ENTITY_DELETED, "Category", categoryId));
 	}
 
-	private Flux<CategoryAssignment> validateAndAssignCategory(Vendor vendor, List<CategoryAssignmentRequest> requests) {
+	private Flux<pl.ecommerce.vendor.domain.model.CategoryAssignment> validateAndAssignCategory(Vendor vendor, List<CategoryAssignmentRequest> requests) {
 		return handleErrorIfFalse(vendor.getActive(), ERROR_CATEGORY_FOR_INACTIVE_VENDOR)
 				.then(checkForExistingAssignments(vendor.getId(), requests))
 				.then(fetchAndValidateCategoryDetails(extractCategoryIds(requests)))
@@ -138,32 +137,32 @@ public class CategoryService {
 				.any(exists -> exists);
 	}
 
-	private boolean isInvalidStatus(CategoryAssignment.CategoryAssignmentStatus status) {
+	private boolean isInvalidStatus(pl.ecommerce.vendor.domain.model.CategoryAssignment.CategoryAssignmentStatus status) {
 		return !EnumSet.of(
-						CategoryAssignment.CategoryAssignmentStatus.ACTIVE,
-						CategoryAssignment.CategoryAssignmentStatus.INACTIVE)
+						pl.ecommerce.vendor.domain.model.CategoryAssignment.CategoryAssignmentStatus.ACTIVE,
+						pl.ecommerce.vendor.domain.model.CategoryAssignment.CategoryAssignmentStatus.INACTIVE)
 				.contains(status);
 	}
 
-	private Mono<CategoryAssignment> updateStatus(CategoryAssignment assignment,
-												  CategoryAssignment.CategoryAssignmentStatus status) {
+	private Mono<pl.ecommerce.vendor.domain.model.CategoryAssignment> updateStatus(pl.ecommerce.vendor.domain.model.CategoryAssignment assignment,
+																				   pl.ecommerce.vendor.domain.model.CategoryAssignment.CategoryAssignmentStatus status) {
 		assignment.setStatus(status);
 		return categoryAssignmentRepository.save(assignment);
 	}
 
-	private Flux<CategoryAssignment> createCategoryAssignments(
+	private Flux<pl.ecommerce.vendor.domain.model.CategoryAssignment> createCategoryAssignments(
 			Vendor vendor,
 			List<CategoryAssignmentRequest> requests,
 			List<ProductServiceClient.CategoryResponse> categoryResponses) {
 
-		List<CategoryAssignment> assignments = requests.stream()
+		List<pl.ecommerce.vendor.domain.model.CategoryAssignment> assignments = requests.stream()
 				.map(request -> createCategoryAssignment(vendor, categoryResponses, request))
 				.toList();
 
 		return saveAllCategoryAssignments(assignments, vendor.getId());
 	}
 
-	private Flux<CategoryAssignment> saveAllCategoryAssignments(List<CategoryAssignment> assignments, UUID vendorId) {
+	private Flux<pl.ecommerce.vendor.domain.model.CategoryAssignment> saveAllCategoryAssignments(List<pl.ecommerce.vendor.domain.model.CategoryAssignment> assignments, UUID vendorId) {
 		return categoryAssignmentRepository.saveAll(assignments)
 				.collectList()
 				.doOnNext(savedAssignments -> {
@@ -174,28 +173,28 @@ public class CategoryService {
 				.flatMapMany(Flux::fromIterable);
 	}
 
-	private CategoryAssignment createCategoryAssignment(Vendor vendor, List<ProductServiceClient.CategoryResponse> categoryResponses, CategoryAssignmentRequest request) {
+	private pl.ecommerce.vendor.domain.model.CategoryAssignment createCategoryAssignment(Vendor vendor, List<ProductServiceClient.CategoryResponse> categoryResponses, CategoryAssignmentRequest request) {
 		UUID catId = UUID.fromString(request.categoryId());
 		ProductServiceClient.CategoryResponse categoryResponse = findCategoryResponseById(categoryResponses, catId);
-		return CategoryAssignment.create(vendor.getId(), toCategory(categoryResponse), request.commissionRate());
+		return pl.ecommerce.vendor.domain.model.CategoryAssignment.create(vendor.getId(), toCategory(categoryResponse), request.commissionRate());
 	}
 
 	private static Category toCategory(ProductServiceClient.CategoryResponse categoryResponse) {
-		return Category.builder()
+		return pl.ecommerce.vendor.domain.model.Category.builder()
 				.id(categoryResponse.id())
 				.name(categoryResponse.name())
 				.description(categoryResponse.description())
 				.build();
 	}
 
-	private static List<CategoryAssignmentDto> mapCategoryAssignments(List<CategoryAssignment> assignments) {
+	private static List<CategoryAssignment> mapCategoryAssignments(List<pl.ecommerce.vendor.domain.model.CategoryAssignment> assignments) {
 		return assignments.stream()
 				.map(CategoryService::map)
 				.toList();
 	}
 
-	private static CategoryAssignmentDto map(CategoryAssignment categoryAssignment) {
-		return CategoryAssignmentDto.builder()
+	private static CategoryAssignment map(pl.ecommerce.vendor.domain.model.CategoryAssignment categoryAssignment) {
+		return CategoryAssignment.builder()
 				.id(categoryAssignment.getId())
 				.createdAt(categoryAssignment.getCreatedAt())
 				.updatedAt(categoryAssignment.getUpdatedAt())
@@ -203,7 +202,7 @@ public class CategoryService {
 				.updatedBy(categoryAssignment.getUpdatedBy())
 				.vendorId(categoryAssignment.getVendorId())
 				.category(mapCategory(categoryAssignment.getCategory()))
-				.status(CategoryAssignmentDto.CategoryAssignmentStatusDto.valueOf(categoryAssignment.getStatus().name()))
+				.status(CategoryAssignment.CategoryAssignmentStatusDto.valueOf(categoryAssignment.getStatus().name()))
 				.categoryCommissionRate(categoryAssignment.getCategoryCommissionRate().getNumberStripped())
 				.currencyUnit(categoryAssignment.getCategoryCommissionRate().getCurrency().getCurrencyCode())
 				.assignedAt(categoryAssignment.getAssignedAt())
@@ -211,15 +210,15 @@ public class CategoryService {
 				.build();
 	}
 
-	private static CategoryAssignmentDto.CategoryDto mapCategory(Category category) {
-		return CategoryAssignmentDto.CategoryDto.builder()
+	private static CategoryAssignment.Category mapCategory(Category category) {
+		return CategoryAssignment.Category.builder()
 				.id(category.getId())
 				.name(category.getName())
 				.description(category.getDescription())
 				.build();
 	}
 
-	public void publishVendorCategoriesAssignedEvent(UUID vendorId, List<CategoryAssignmentDto> categories) {
+	public void publishVendorCategoriesAssignedEvent(UUID vendorId, List<CategoryAssignment> categories) {
 		var event = createVendorCategoriesAssignedEvent(vendorId, categories);
 		log.info("Categories {}, assigned for vendor: {}", categories, vendorId);
 		eventPublisher.publish(event);

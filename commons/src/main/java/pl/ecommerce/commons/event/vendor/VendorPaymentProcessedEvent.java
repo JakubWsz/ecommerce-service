@@ -1,12 +1,10 @@
 package pl.ecommerce.commons.event.vendor;
 
 import lombok.*;
-import org.javamoney.moneta.Money;
-import pl.ecommerce.commons.event.DomainEvent;
 import pl.ecommerce.commons.event.Message;
 
-import javax.money.MonetaryAmount;
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.UUID;
 
@@ -14,7 +12,7 @@ import java.util.UUID;
 @EqualsAndHashCode(callSuper = true)
 @Message("vendor.payment.processed.event")
 @NoArgsConstructor
-public class VendorPaymentProcessedEvent extends DomainEvent {
+public class VendorPaymentProcessedEvent extends VendorEvent {
 	private UUID vendorId;
 	private UUID paymentId;
 	private BigDecimal price;
@@ -22,10 +20,10 @@ public class VendorPaymentProcessedEvent extends DomainEvent {
 	private LocalDateTime paymentDate;
 
 	@Builder
-	public VendorPaymentProcessedEvent(UUID correlationId, UUID vendorId, UUID paymentId,
-									   BigDecimal price,String currencyUnit, LocalDateTime paymentDate) {
-		super(correlationId);
-		this.vendorId = vendorId;
+	public VendorPaymentProcessedEvent(UUID vendorId, UUID paymentId,
+									   BigDecimal price, String currencyUnit, LocalDateTime paymentDate,
+									   int version, Instant timestamp) {
+		super(vendorId, version, timestamp);
 		this.paymentId = paymentId;
 		this.price = price;
 		this.currencyUnit = currencyUnit;

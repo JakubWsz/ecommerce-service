@@ -4,6 +4,9 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import pl.ecommerce.customer.domain.exceptions.CustomerAlreadyExistsException;
+import pl.ecommerce.customer.domain.exceptions.CustomerNotFoundException;
+import pl.ecommerce.customer.domain.exceptions.GdprConsentRequiredException;
 
 import java.time.LocalDateTime;
 

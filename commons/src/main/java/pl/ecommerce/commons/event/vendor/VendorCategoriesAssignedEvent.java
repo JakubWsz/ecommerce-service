@@ -1,10 +1,10 @@
 package pl.ecommerce.commons.event.vendor;
 
 import lombok.*;
-import pl.ecommerce.commons.dto.CategoryAssignmentDto;
-import pl.ecommerce.commons.event.DomainEvent;
+import pl.ecommerce.commons.model.CategoryAssignment;
 import pl.ecommerce.commons.event.Message;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
@@ -12,14 +12,13 @@ import java.util.UUID;
 @EqualsAndHashCode(callSuper = true)
 @Message("vendor.categories.assigned.event")
 @NoArgsConstructor
-public class VendorCategoriesAssignedEvent extends DomainEvent {
-	private UUID vendorId;
-	private List<CategoryAssignmentDto> categories;
+public class VendorCategoriesAssignedEvent extends VendorEvent {
+	private List<CategoryAssignment> categories;
 
 	@Builder
-	public VendorCategoriesAssignedEvent(UUID correlationId, UUID vendorId, List<CategoryAssignmentDto> categories) {
-		super(correlationId);
-		this.vendorId = vendorId;
+	public VendorCategoriesAssignedEvent(UUID vendorId, List<CategoryAssignment> categories, int version,
+										 Instant timestamp) {
+		super(vendorId,version,timestamp);
 		this.categories = categories;
 	}
 }

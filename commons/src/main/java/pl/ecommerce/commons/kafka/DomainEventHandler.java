@@ -62,8 +62,8 @@ public abstract class DomainEventHandler{
 			containerFactory = "kafkaListenerContainerFactory"
 	)
 	public void consume(DomainEvent event) {
-		log.info("Received event: {} with correlationId: {}",
-				event.getClass().getSimpleName(), event.getCorrelationId());
+		log.info("Received event: {} with aggregateId: {}",
+				event.getClass().getSimpleName(), event.getAggregateId());
 		boolean processed = processEvent(event);
 		if (!processed) {
 			log.info("No handler found for event type: {}", event.getClass().getSimpleName());

@@ -1,6 +1,6 @@
 package pl.ecommerce.vendor.infrastructure;
 
-import pl.ecommerce.commons.dto.CategoryAssignmentDto;
+import pl.ecommerce.commons.model.CategoryAssignment;
 import pl.ecommerce.commons.event.vendor.*;
 import pl.ecommerce.vendor.domain.model.Vendor;
 import pl.ecommerce.vendor.domain.model.VendorPayment;
@@ -62,7 +62,7 @@ public final class VendorEventUtils {
 				.build();
 	}
 
-	public static VendorCategoriesAssignedEvent createVendorCategoriesAssignedEvent(UUID vendorId, List<CategoryAssignmentDto> categories) {
+	public static VendorCategoriesAssignedEvent createVendorCategoriesAssignedEvent(UUID vendorId, List<CategoryAssignment> categories) {
 		return VendorCategoriesAssignedEvent.builder()
 				.correlationId(UUID.randomUUID())
 				.vendorId(vendorId)

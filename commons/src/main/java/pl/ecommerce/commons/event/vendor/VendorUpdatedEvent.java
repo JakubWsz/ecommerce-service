@@ -1,9 +1,9 @@
 package pl.ecommerce.commons.event.vendor;
 
 import lombok.*;
-import pl.ecommerce.commons.event.DomainEvent;
 import pl.ecommerce.commons.event.Message;
 
+import java.time.Instant;
 import java.util.Map;
 import java.util.UUID;
 
@@ -11,15 +11,13 @@ import java.util.UUID;
 @EqualsAndHashCode(callSuper = true)
 @Message("vendor.updated.event")
 @NoArgsConstructor
-public class VendorUpdatedEvent extends DomainEvent {
-	private UUID vendorId;
+public class VendorUpdatedEvent extends VendorEvent {
 	private Map<String, Object> changes;
 
-
 	@Builder
-	public VendorUpdatedEvent(UUID correlationId, UUID vendorId, Map<String, Object> changes) {
-		super(correlationId);
-		this.vendorId = vendorId;
+	public VendorUpdatedEvent(UUID correlationId, UUID vendorId,
+							  Map<String, Object> changes, int version, Instant timestamp) {
+		super(vendorId, version, timestamp);
 		this.changes = changes;
 	}
 }
