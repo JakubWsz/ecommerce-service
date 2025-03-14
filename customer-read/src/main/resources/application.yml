@@ -1,0 +1,150 @@
+# Common configuration for all profiles
+spring:
+  application:
+    name: customer-read
+  main:
+    web-application-type: reactive
+
+  # MongoDB configuration for read model
+  data:
+    mongodb:
+      uri: mongodb://customer_user:customer_password@localhost:27017/customer?authSource=admin
+      database: customer
+      authentication-database: admin
+      auto-index-creation: true
+
+  # Kafka configuration for event consumption
+  kafka:
+    bootstrap-servers: localhost:9092
+    schema-registry-url: http://localhost:8081
+    consumer:
+      group-id: ${spring.application.name}
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      properties:
+        spring.json.trusted.packages: pl.ecommerce.customer.commons.events
+      enable-auto-commit: false
+    listener:
+      ack-mode: MANUAL
+
+# Configure the topics to listen for
+event:
+  listener:
+    group-id: ${spring.application.name}-group
+    topics:
+      - customer.registered.event
+      - customer.updated.event
+      - customer.email-changed.event
+      - customer.email-verified.event
+      - customer.address-added.event
+      - customer.address-updated.event
+      - customer.address-removed.event
+      - customer.preferences-updated.event
+      - customer.deactivated.event
+      - customer.reactivated.event
+      - customer.deleted.event
+
+# Server settings
+server:
+  port: ${SERVER_PORT:8080}
+  shutdown: graceful
+  http2:
+    enabled: true
+
+# Monitoring and actuator configuration
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus,metrics,loggers,env,beans
+  endpoint:
+    health:
+      show-details: always
+  metrics:
+    distribution:
+      percentiles-histogram:
+        http.server.requests: true
+      percentiles:
+        http.server.requests: 0.5, 0.9, 0.95, 0.99
+    tags:
+      application: ${spring.application.name}
+  tracing:
+    enabled: true
+    sampling:
+      probability: 1.0
+
+# Logging configuration
+logging:
+  level:
+    root: INFO
+    pl.ecommerce: INFO
+    pl.ecommerce.customer.read: DEBUG
+    org.springframework.data.mongodb: INFO
+    org.springframework.kafka: INFO
+    org.springframework.web.reactive: INFO
+
+# Enable Swagger UI
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+    enabled: true
+  api-docs:
+    enabled: true
+
+---
+# Profile: dev
+spring:
+  config:
+    activate:
+      on-profile: dev
+
+  # MongoDB configuration for development
+  data:
+    mongodb:
+      uri: mongodb://customer_user:customer_password@localhost:27017/customer?authSource=admin
+      database: customer
+
+  # Kafka configuration for development
+  kafka:
+    bootstrap-servers: localhost:9092
+    schema-registry-url: http://localhost:8081
+
+# Logging configuration for dev
+logging:
+  level:
+    pl.ecommerce.customer.read: DEBUG
+    org.springframework.data.mongodb: DEBUG
+
+server:
+  port: 8082
+---
+# Profile: prod
+spring:
+  config:
+    activate:
+      on-profile: prod
+
+  # MongoDB configuration for production
+  data:
+    mongodb:
+      uri: mongodb://${MONGO_USER:customer_user}:${MONGO_PASSWORD:customer_password}@${MONGO_HOST:mongodb}:${MONGO_PORT:27017}/${MONGO_DB:customer}?authSource=admin
+      database: ${MONGO_DB:customer}
+
+  # Kafka configuration for production
+  kafka:
+    bootstrap-servers: ${KAFKA_SERVERS:kafka:9092}
+    schema-registry-url: ${SCHEMA_REGISTRY_URL:http://schema-registry:8081}
+
+# Logging configuration for production
+logging:
+  level:
+    root: WARN
+    pl.ecommerce.customer.read: INFO
+
+# Disable Swagger UI for production
+springdoc:
+  swagger-ui:
+    enabled: false
+  api-docs:
+    enabled: false

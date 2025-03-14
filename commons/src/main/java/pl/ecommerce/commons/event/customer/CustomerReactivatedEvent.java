@@ -14,7 +14,7 @@ import java.util.UUID;
 public class CustomerReactivatedEvent extends CustomerEvent {
 
 	@Builder
-	public CustomerReactivatedEvent(UUID customerId,
+	public CustomerReactivatedEvent(UUID customerId,String note,
 									Instant timestamp, int version) {
 		super(customerId, version, timestamp);
 	}

@@ -1,13 +1,16 @@
 package pl.ecommerce.commons.event;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonSubTypes;
 import com.fasterxml.jackson.annotation.JsonTypeInfo;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import lombok.Setter;
 import pl.ecommerce.commons.event.customer.*;
 import pl.ecommerce.commons.event.product.ProductCreatedEvent;
 import pl.ecommerce.commons.event.product.ProductUpdatedEvent;
 import pl.ecommerce.commons.event.vendor.*;
+import pl.ecommerce.commons.tracing.TracingContext;
 
 import java.time.Instant;
 import java.util.UUID;
@@ -40,6 +43,10 @@ public abstract class AbstractDomainEvent implements DomainEvent {
 	private final UUID eventId;
 	private final Instant timestamp;
 
+	@Setter
+	@JsonIgnore
+	private TracingContext tracingContext;
+
 	protected AbstractDomainEvent() {
 		this.eventId = UUID.randomUUID();
 		this.timestamp = Instant.now();
@@ -48,5 +55,10 @@ public abstract class AbstractDomainEvent implements DomainEvent {
 	@Override
 	public String getEventType() {
 		return this.getClass().getSimpleName();
+	}
+
+	@Override
+	public TracingContext getTracingContext() {
+		return tracingContext;
 	}
 }

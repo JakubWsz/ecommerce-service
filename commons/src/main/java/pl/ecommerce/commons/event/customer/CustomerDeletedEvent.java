@@ -17,7 +17,7 @@ public class CustomerDeletedEvent extends CustomerEvent {
 	private String lastName;
 
 	@Builder
-	public CustomerDeletedEvent(UUID customerId, String email, String firstName, String lastName,
+	public CustomerDeletedEvent(UUID customerId, String email, String firstName, String lastName, String reason,
 								Instant timestamp, int version) {
 		super(customerId, version, timestamp);
 		this.email = email;

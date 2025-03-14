@@ -4,8 +4,10 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.kafka.clients.consumer.ConsumerRecord;
+import org.apache.kafka.common.header.Header;
 import org.springframework.kafka.annotation.KafkaListener;
-import org.springframework.kafka.core.KafkaTemplate;
+import org.springframework.kafka.support.Acknowledgment;
 import pl.ecommerce.commons.event.DomainEvent;
 
 import java.lang.reflect.Method;
@@ -14,10 +16,9 @@ import java.util.Map;
 
 @Slf4j
 @RequiredArgsConstructor
-public abstract class DomainEventHandler{
+public abstract class DomainEventHandler {
 
 	protected final ObjectMapper objectMapper;
-	protected final KafkaTemplate<String, Object> kafkaTemplate;
 	protected final TopicsProvider topicsProvider;
 
 	private final Map<Class<? extends DomainEvent>, Method> handlerMethods = new HashMap<>();
@@ -27,7 +28,9 @@ public abstract class DomainEventHandler{
 		for (Method method : this.getClass().getDeclaredMethods()) {
 			if (method.isAnnotationPresent(EventHandler.class)) {
 				Class<?>[] paramTypes = method.getParameterTypes();
-				if (paramTypes.length == 1 && DomainEvent.class.isAssignableFrom(paramTypes[0])) {
+				if ((paramTypes.length == 1 && DomainEvent.class.isAssignableFrom(paramTypes[0])) ||
+						(paramTypes.length == 2 && DomainEvent.class.isAssignableFrom(paramTypes[0]) &&
+								Map.class.isAssignableFrom(paramTypes[1]))) {
 					@SuppressWarnings("unchecked")
 					Class<? extends DomainEvent> eventType = (Class<? extends DomainEvent>) paramTypes[0];
 					handlerMethods.put(eventType, method);
@@ -37,16 +40,19 @@ public abstract class DomainEventHandler{
 		}
 	}
 
-
 	public String[] getSubscribedTopics() {
 		return topicsProvider.getTopics();
 	}
 
-	public boolean processEvent(DomainEvent event) {
+	public boolean processEvent(DomainEvent event, Map<String, String> headers) {
 		Method handler = handlerMethods.get(event.getClass());
 		if (handler != null) {
 			try {
-				handler.invoke(this, event);
+				if (handler.getParameterCount() == 1) {
+					handler.invoke(this, event);
+				} else {
+					handler.invoke(this, event, headers);
+				}
 				return true;
 			} catch (Exception e) {
 				log.error("Error invoking handler for event {}: {}",
@@ -61,12 +67,29 @@ public abstract class DomainEventHandler{
 			groupId = "${event.listener.group-id:${spring.application.name}-group}",
 			containerFactory = "kafkaListenerContainerFactory"
 	)
-	public void consume(DomainEvent event) {
-		log.info("Received event: {} with aggregateId: {}",
-				event.getClass().getSimpleName(), event.getAggregateId());
-		boolean processed = processEvent(event);
-		if (!processed) {
-			log.info("No handler found for event type: {}", event.getClass().getSimpleName());
+	public void consume(ConsumerRecord<String, DomainEvent> record, Acknowledgment ack) {
+		DomainEvent event = record.value();
+
+		Map<String, String> headers = new HashMap<>();
+		for (Header header : record.headers()) {
+			String headerValue = header.value() != null ? new String(header.value()) : null;
+			headers.put(header.key(), headerValue);
+		}
+
+		String key = record.key();
+		String eventType = event.getClass().getSimpleName();
+
+		log.info("Received event: {} with key: {}, aggregateId: {}",
+				eventType, key, event.getAggregateId());
+
+		try {
+			boolean processed = processEvent(event, headers);
+			if (!processed) {
+				log.info("No handler found for event type: {}", eventType);
+			}
+			ack.acknowledge();
+		} catch (Exception e) {
+			log.error("Error processing event: {}", eventType, e);
 		}
 	}
 }

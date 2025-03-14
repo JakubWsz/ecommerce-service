@@ -1,7 +1,6 @@
 package pl.ecommerce.commons.event.vendor;
 
 import lombok.*;
-import pl.ecommerce.commons.model.CategoryAssignment;
 import pl.ecommerce.commons.event.Message;
 
 import java.time.Instant;

@@ -1,6 +1,5 @@
 package pl.ecommerce.vendor.infrastructure;
 
-import pl.ecommerce.commons.model.CategoryAssignment;
 import pl.ecommerce.commons.event.vendor.*;
 import pl.ecommerce.vendor.domain.model.Vendor;
 import pl.ecommerce.vendor.domain.model.VendorPayment;

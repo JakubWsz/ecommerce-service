@@ -1,8 +1,8 @@
 package pl.ecommerce.commons.event.customer;
 
 import lombok.*;
+import pl.ecommerce.commons.customer.model.AddressType;
 import pl.ecommerce.commons.event.Message;
-import pl.ecommerce.commons.model.AddressType;
 
 import java.time.Instant;
 import java.util.UUID;
