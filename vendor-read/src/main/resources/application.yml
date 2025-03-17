@@ -1,0 +1,57 @@
+server:
+  port: 8084
+
+spring:
+  application:
+    name: vendor-read
+  data:
+    mongodb:
+      uri: mongodb://vendor_user:vendor_password@localhost:27017/vendor?authSource=admin
+      database: vendor_dev
+      authentication-database: admin
+      auto-index-creation: true
+
+  kafka:
+    bootstrap-servers: localhost:29092
+    schema-registry-url: http://localhost:8083
+    consumer:
+      group-id: ${spring.application.name}
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      properties:
+        spring.json.trusted.packages: pl.ecommerce.customer.commons.events
+      enable-auto-commit: false
+    listener:
+      ack-mode: MANUAL
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  metrics:
+    tags:
+      application: ${spring.application.name}
+
+logging:
+  level:
+    root: INFO
+    pl.ecommerce: DEBUG
+    org.springframework.web: INFO
+    org.springframework.data: INFO
+    org.springframework.kafka: INFO
+
+event:
+  listener:
+    group-id: ${spring.application.name}-group
+    topics:
+      - vendor.registered.event
+      - vendor.updated.event
+      - vendor.deleted.event
+      - vendor.status-changed.event
+      - vendor.bank-details-updated.event
+      - vendor.category-assigned.event
+      - vendor.category-removed.event
+      - vendor.payment.processed.event
+      - vendor.verification-completed.event

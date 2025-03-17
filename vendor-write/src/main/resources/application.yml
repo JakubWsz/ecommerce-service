@@ -1,0 +1,48 @@
+server:
+  port: 8083
+
+spring:
+  application:
+    name: vendor-write
+  datasource:
+    url: jdbc:postgresql://localhost:5432/vendor
+    username: postgres
+    password: postgres
+    driver-class-name: org.postgresql.Driver
+  jpa:
+    hibernate:
+      ddl-auto: update
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+    show-sql: true
+
+  kafka:
+    bootstrap-servers: localhost:29092
+    schema-registry-url: http://localhost:8081
+    producer:
+      #      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      #      value-serializer: org.apache.kafka.common.serialization.JsonSerializer
+      acks: all
+      retries: 3
+      properties:
+        delivery.timeout.ms: 120000
+        request.timeout.ms: 30000
+        retry.backoff.ms: 500
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  metrics:
+    tags:
+      application: ${spring.application.name}
+
+logging:
+  level:
+    root: INFO
+    pl.ecommerce: DEBUG
+    org.springframework.web: INFO
+    org.springframework.data: INFO
+    org.springframework.kafka: INFO
