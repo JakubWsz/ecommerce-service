@@ -16,10 +16,11 @@
     <description>Projekt e-commerce z modułami</description>
     <modules>
         <module>commons</module>
-        <module>customer</module>
-        <module>eventstore</module>
-        <module>vendor</module>
-        <!-- <module>product</module> -->
+        <module>customer-write</module>
+        <module>customer-read</module>
+        <module>vendor-write</module>
+        <module>vendor-read</module>
+        <module>product</module>
         <!-- <module>order</module> -->
         <!-- <module>payment</module> -->
         <!-- <module>shipping</module> -->
@@ -42,11 +43,6 @@
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-webflux</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-data-mongodb-reactive</artifactId>
-            <version>3.4.3</version>
         </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>
@@ -85,6 +81,22 @@
             <groupId>org.projectlombok</groupId>
             <artifactId>lombok</artifactId>
             <optional>true</optional>
+        </dependency>
+        <dependency>
+            <groupId>io.micrometer</groupId>
+            <artifactId>micrometer-tracing</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.micrometer</groupId>
+            <artifactId>micrometer-tracing-bridge-brave</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.micrometer</groupId>
+            <artifactId>micrometer-observation</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.zipkin.reporter2</groupId>
+            <artifactId>zipkin-reporter-brave</artifactId>
         </dependency>
 
         <dependency>

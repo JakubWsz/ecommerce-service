@@ -10,6 +10,7 @@ services:
     environment:
       POSTGRES_PASSWORD: postgres
       POSTGRES_USER: postgres
+      # Utworzy bazy: customer, product, vendor, payment
       POSTGRES_MULTIPLE_DATABASES: customer,product,vendor,payment
     ports:
       - "5432:5432"
@@ -52,6 +53,7 @@ services:
       - "27017:27017"
     volumes:
       - mongodb-data:/data/db
+      # Skrypt inicjalizacyjny tworzy bazy: customer, product, vendor, payment
       - ./scripts/mongo-init.js:/docker-entrypoint-initdb.d/mongo-init.js
     networks:
       - backend-network
@@ -60,7 +62,6 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-
 
   # Mongo Express (MongoDB GUI)
   mongo-express:
@@ -175,23 +176,39 @@ services:
       retries: 5
       start_period: 30s
 
-  # Kafdrop (Kafka GUI)
-  kafdrop:
-    image: obsidiandynamics/kafdrop:latest
-    container_name: ecommerce-kafdrop
+  # AKHQ (Kafka GUI)
+  akhq:
+    image: tchiotludo/akhq:latest
+    container_name: ecommerce-akhq
     depends_on:
       kafka:
         condition: service_healthy
     ports:
       - "9000:9000"
     environment:
-      KAFKA_BROKERCONNECT: kafka:9092
-      JVM_OPTS: "-Xms32M -Xmx64M"
-      SERVER_SERVLET_CONTEXTPATH: "/"
+      AKHQ_CONFIGURATION: |
+        micronaut:
+          server:
+            port: 9000
+        akhq:
+          connections:
+            kafka:
+              properties:
+                bootstrap.servers: "kafka:9092"
     networks:
       - kafka-network
 
+
   ### LOGGING & MONITORING STACK ###
+
+  # Zipkin
+  zipkin:
+    image: openzipkin/zipkin:latest
+    container_name: ecommerce-zipkin
+    ports:
+      - "9411:9411"
+    networks:
+      - backend-network
 
   # Elasticsearch
   elasticsearch:
