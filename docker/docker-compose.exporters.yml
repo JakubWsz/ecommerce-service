@@ -1,0 +1,90 @@
+version: '3.8'
+
+services:
+  # Postgres Exporter - metryki dla PostgreSQL
+  postgres-exporter:
+    image: prometheuscommunity/postgres-exporter:latest
+    container_name: ecommerce-postgres-exporter
+    environment:
+      DATA_SOURCE_NAME: "postgresql://postgres:postgres@postgres:5432/postgres?sslmode=disable"
+    ports:
+      - "9187:9187"
+    networks:
+      - backend-network
+      - monitoring-network
+    depends_on:
+      - postgres
+    restart: always
+
+  # Redis Exporter - metryki dla Redis
+  redis-exporter:
+    image: oliver006/redis_exporter:latest
+    container_name: ecommerce-redis-exporter
+    environment:
+      REDIS_ADDR: "redis:6379"
+      REDIS_PASSWORD: "redis"
+    ports:
+      - "9121:9121"
+    networks:
+      - backend-network
+      - monitoring-network
+    depends_on:
+      - redis
+    restart: always
+
+  # MongoDB Exporter - metryki dla MongoDB
+  mongodb-exporter:
+    image: percona/mongodb_exporter:latest
+    container_name: ecommerce-mongodb-exporter
+    environment:
+      MONGODB_URI: "mongodb://admin:admin@mongodb:27017/admin?directConnection=true"
+    ports:
+      - "9216:9216"
+    networks:
+      - backend-network
+      - monitoring-network
+    depends_on:
+      - mongodb
+    restart: always
+
+  # Kafka Exporter - metryki dla Kafka
+  kafka-exporter:
+    image: danielqsj/kafka-exporter:latest
+    container_name: ecommerce-kafka-exporter
+    command:
+      - --kafka.server=kafka:9092
+    ports:
+      - "9308:9308"
+    networks:
+      - kafka-network
+      - monitoring-network
+    depends_on:
+      - kafka
+    restart: always
+
+  # Node Exporter - metryki dla hosta
+  node-exporter:
+    image: prom/node-exporter:latest
+    container_name: ecommerce-node-exporter
+    ports:
+      - "9100:9100"
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+    command:
+      - '--path.procfs=/host/proc'
+      - '--path.sysfs=/host/sys'
+      - '--path.rootfs=/rootfs'
+      - '--collector.filesystem.ignored-mount-points=^/(sys|proc|dev|host|etc)($$|/)'
+    networks:
+      - monitoring-network
+    restart: always
+
+networks:
+  backend-network:
+    external: true
+  monitoring-network:
+    external: true
+  kafka-network:
+    external: true

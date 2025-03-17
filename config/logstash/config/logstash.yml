@@ -1,0 +1,13 @@
+http.host: "0.0.0.0"
+xpack.monitoring.enabled: false
+
+# Ścieżka do pipeline
+path.config: /usr/share/logstash/pipeline
+
+# Zwiększ wydajność logstash
+pipeline.workers: 2
+pipeline.batch.size: 125
+pipeline.batch.delay: 50
+
+# Zmniejsz zużycie pamięci
+queue.type: persisted
