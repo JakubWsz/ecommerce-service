@@ -15,6 +15,8 @@ import pl.ecommerce.commons.tracing.TracingContext;
 import java.time.Instant;
 import java.util.UUID;
 
+import static java.util.Objects.nonNull;
+
 @Getter
 @JsonTypeInfo(use = JsonTypeInfo.Id.NAME, include = JsonTypeInfo.As.PROPERTY, property = "eventType")
 @JsonSubTypes({
@@ -33,7 +35,7 @@ import java.util.UUID;
 		@JsonSubTypes.Type(value = ProductCreatedEvent.class, name = "ProductCreatedEvent"),
 		@JsonSubTypes.Type(value = ProductUpdatedEvent.class, name = "ProductUpdatedEvent"),
 		@JsonSubTypes.Type(value = VendorPaymentProcessedEvent.class, name = "VendorPaymentProcessedEvent"),
-		@JsonSubTypes.Type(value = VendorCategoriesAssignedEvent.class, name = "VendorCategoriesAssignedEvent"),
+//		@JsonSubTypes.Type(value = VendorCategoriesAssignedEvent.class, name = "VendorCategoriesAssignedEvent"),
 		@JsonSubTypes.Type(value = VendorRegisteredEvent.class, name = "VendorRegisteredEvent"),
 		@JsonSubTypes.Type(value = VendorStatusChangedEvent.class, name = "VendorStatusChangedEvent"),
 		@JsonSubTypes.Type(value = VendorUpdatedEvent.class, name = "VendorUpdatedEvent"),
@@ -60,5 +62,15 @@ public abstract class AbstractDomainEvent implements DomainEvent {
 	@Override
 	public TracingContext getTracingContext() {
 		return tracingContext;
+	}
+
+	@Override
+	public String extractTraceId() {
+		return nonNull(this.getTracingContext()) ? this.getTracingContext().getTraceId() : "unknown";
+	}
+
+	@Override
+	public String extractSpanId() {
+		return nonNull(this.getTracingContext()) ? this.getTracingContext().getSpanId() : null;
 	}
 }

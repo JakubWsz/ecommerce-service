@@ -15,13 +15,13 @@ spring:
 
   # Kafka configuration for event consumption
   kafka:
-    bootstrap-servers: localhost:9092
+    bootstrap-servers: localhost:29092
     schema-registry-url: http://localhost:8081
     consumer:
       group-id: ${spring.application.name}
       auto-offset-reset: earliest
       key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
-      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
       properties:
         spring.json.trusted.packages: pl.ecommerce.customer.commons.events
       enable-auto-commit: false
@@ -107,7 +107,7 @@ spring:
 
   # Kafka configuration for development
   kafka:
-    bootstrap-servers: localhost:9092
+    bootstrap-servers: localhost:29092
     schema-registry-url: http://localhost:8081
 
 # Logging configuration for dev

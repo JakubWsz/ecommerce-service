@@ -1,7 +1,7 @@
 package pl.ecommerce.commons.event.customer;
 
 import lombok.*;
-import pl.ecommerce.commons.customer.model.CustomerPreferences;
+import pl.ecommerce.commons.model.customer.CustomerPreferences;
 import pl.ecommerce.commons.event.Message;
 
 import java.time.Instant;

@@ -1,6 +1,6 @@
 package pl.ecommerce.customer.write.api.mapper;
 
-import pl.ecommerce.commons.customer.model.CustomerPreferences;
+import pl.ecommerce.commons.model.customer.CustomerPreferences;
 import pl.ecommerce.customer.write.api.dto.*;
 
 import java.util.UUID;

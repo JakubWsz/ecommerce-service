@@ -1,10 +1,10 @@
 package pl.ecommerce.customer.read.infrastructure.projector;
 
 import org.springframework.data.mongodb.core.query.Update;
-import pl.ecommerce.commons.customer.model.Address;
-import pl.ecommerce.commons.customer.model.AddressType;
-import pl.ecommerce.commons.customer.model.CustomerPreferences;
-import pl.ecommerce.commons.customer.model.CustomerStatus;
+import pl.ecommerce.commons.model.customer.Address;
+import pl.ecommerce.commons.model.customer.AddressType;
+import pl.ecommerce.commons.model.customer.CustomerPreferences;
+import pl.ecommerce.commons.model.customer.CustomerStatus;
 import pl.ecommerce.commons.event.customer.*;
 import pl.ecommerce.commons.tracing.TracingContext;
 import pl.ecommerce.customer.read.domain.model.CustomerReadModel;
@@ -21,9 +21,10 @@ import static java.util.Objects.nonNull;
 public interface CustomerEventProjectorHelper {
 
 	static CustomerReadModel buildCustomerReadModel(CustomerRegisteredEvent event, String traceId) {
-		TracingContext tracingContext = event.getTracingContext();
+		var tracingContext = event.getTracingContext();
+		var aggregateId = event.getAggregateId();
 		return CustomerReadModel.builder()
-				.id(event.getAggregateId())
+				.id(aggregateId)
 				.email(event.getEmail())
 				.firstName(event.getFirstName())
 				.lastName(event.getLastName())
@@ -235,11 +236,6 @@ public interface CustomerEventProjectorHelper {
 				.set("lastSpanId", tracingContext != null ? tracingContext.getSpanId() : null)
 				.set("lastOperation", "DeactivateCustomer")
 				.set("lastUpdatedAt", Instant.now());
-	}
-
-	static String extractTraceId(CustomerEvent event) {
-		TracingContext tracingContext = event.getTracingContext();
-		return nonNull(tracingContext) ? tracingContext.getTraceId() : "unknown";
 	}
 
 	static void updateTracingInfo(CustomerReadModel customer, CustomerEvent event, String traceId, String operation) {

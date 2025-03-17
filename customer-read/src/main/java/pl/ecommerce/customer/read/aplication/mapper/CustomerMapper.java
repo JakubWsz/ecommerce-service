@@ -1,7 +1,7 @@
 package pl.ecommerce.customer.read.aplication.mapper;
 
-import pl.ecommerce.commons.customer.model.Address;
-import pl.ecommerce.commons.customer.model.CustomerPreferences;
+import pl.ecommerce.commons.model.customer.Address;
+import pl.ecommerce.commons.model.customer.CustomerPreferences;
 import pl.ecommerce.customer.read.aplication.dto.AddressResponse;
 import pl.ecommerce.customer.read.aplication.dto.CustomerResponse;
 import pl.ecommerce.customer.read.aplication.dto.CustomerSummary;

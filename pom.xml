@@ -18,8 +18,8 @@
         <module>commons</module>
         <module>customer-write</module>
         <module>customer-read</module>
-        <module>eventstore</module>
-        <module>vendor</module>
+        <module>vendor-write</module>
+        <module>vendor-read</module>
         <module>product</module>
         <!-- <module>order</module> -->
         <!-- <module>payment</module> -->

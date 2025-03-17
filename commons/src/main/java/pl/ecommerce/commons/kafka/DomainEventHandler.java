@@ -11,8 +11,11 @@ import org.springframework.kafka.support.Acknowledgment;
 import pl.ecommerce.commons.event.DomainEvent;
 
 import java.lang.reflect.Method;
+import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Objects;
+import java.util.UUID;
 
 @Slf4j
 @RequiredArgsConstructor
@@ -67,29 +70,49 @@ public abstract class DomainEventHandler {
 			groupId = "${event.listener.group-id:${spring.application.name}-group}",
 			containerFactory = "kafkaListenerContainerFactory"
 	)
-	public void consume(ConsumerRecord<String, DomainEvent> record, Acknowledgment ack) {
-		DomainEvent event = record.value();
-
-		Map<String, String> headers = new HashMap<>();
-		for (Header header : record.headers()) {
-			String headerValue = header.value() != null ? new String(header.value()) : null;
-			headers.put(header.key(), headerValue);
-		}
-
-		String key = record.key();
-		String eventType = event.getClass().getSimpleName();
-
-		log.info("Received event: {} with key: {}, aggregateId: {}",
-				eventType, key, event.getAggregateId());
-
+	public void consume(ConsumerRecord<String, Object> record, Acknowledgment ack) {
 		try {
+			Object value = record.value();
+
+			if (!(value instanceof DomainEvent event)) {
+				log.error("Received message is not a DomainEvent: {}", value);
+				ack.acknowledge();
+				return;
+			}
+
+			String eventType = event.getClass().getSimpleName();
+			String key = record.key();
+			UUID aggregateId = event.getAggregateId();
+
+			log.info("Received event: {} with key: {}, aggregateId: {}",
+					eventType, key, aggregateId);
+
+			Map<String, String> headers = extractHeaders(record);
+
 			boolean processed = processEvent(event, headers);
 			if (!processed) {
 				log.info("No handler found for event type: {}", eventType);
 			}
+
 			ack.acknowledge();
+
 		} catch (Exception e) {
-			log.error("Error processing event: {}", eventType, e);
+			log.error("Error processing Kafka message: {}", e.getMessage(), e);
+			//todo DLQ
+			ack.acknowledge();
 		}
+	}
+
+	private Map<String, String> extractHeaders(ConsumerRecord<?, ?> record) {
+		Map<String, String> result = new HashMap<>();
+
+		for (Header header : record.headers()) {
+			if (Objects.nonNull(header.key()) && Objects.nonNull(header.value())) {
+				String headerValue = new String(header.value(), StandardCharsets.UTF_8);
+				result.put(header.key(), headerValue);
+			}
+		}
+
+		return result;
 	}
 }

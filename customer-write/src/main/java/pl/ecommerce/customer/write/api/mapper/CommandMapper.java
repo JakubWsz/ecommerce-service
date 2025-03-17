@@ -2,8 +2,8 @@ package pl.ecommerce.customer.write.api.mapper;
 
 import java.util.UUID;
 
-import pl.ecommerce.commons.customer.model.AddressType;
-import pl.ecommerce.commons.customer.model.CustomerPreferences;
+import pl.ecommerce.commons.model.customer.AddressType;
+import pl.ecommerce.commons.model.customer.CustomerPreferences;
 import pl.ecommerce.customer.write.api.dto.CustomerRegistrationRequest;
 import pl.ecommerce.customer.write.api.dto.CustomerUpdateRequest;
 import pl.ecommerce.customer.write.api.dto.AddShippingAddressRequest;

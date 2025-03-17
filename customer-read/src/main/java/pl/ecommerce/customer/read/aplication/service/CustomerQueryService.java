@@ -8,7 +8,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
-import pl.ecommerce.commons.customer.model.CustomerStatus;
+import pl.ecommerce.commons.model.customer.CustomerStatus;
 import pl.ecommerce.commons.tracing.TracingContext;
 import pl.ecommerce.customer.read.aplication.dto.CustomerResponse;
 import pl.ecommerce.customer.read.aplication.dto.CustomerSummary;

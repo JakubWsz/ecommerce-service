@@ -12,6 +12,4 @@ public interface EventStore {
 	List<DomainEvent> getEventsForAggregate(UUID aggregateId);
 
 	void markEventsAsDeleted(UUID aggregateId);
-
-	int getCurrentVersion(UUID aggregateId);
 }

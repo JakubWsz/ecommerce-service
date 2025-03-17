@@ -28,7 +28,7 @@ public class JdbcEventStore implements EventStore {
 	private final ObjectMapper objectMapper;
 
 	@Override
-	@Transactional(propagation = Propagation.MANDATORY)
+	@Transactional(propagation = Propagation.REQUIRED)
 	public void saveEvents(UUID aggregateId, List<DomainEvent> events, int expectedVersion) {
 		int currentVersion = getCurrentVersion(aggregateId);
 		if (expectedVersion != -1 && currentVersion != expectedVersion) {
@@ -67,14 +67,12 @@ public class JdbcEventStore implements EventStore {
 		log.info("Marked events for aggregate {} as deleted", aggregateId);
 	}
 
-	@Override
-	@Transactional(readOnly = true)
-	public int getCurrentVersion(UUID aggregateId) {
+	private int getCurrentVersion(UUID aggregateId) {
 		Integer version = jdbcTemplate.queryForObject(
 				"SELECT MAX(version) FROM event_store WHERE aggregate_id = ? AND deleted = false",
 				Integer.class,
 				aggregateId);
-		return version != null ? version : -1;
+		return version != null ? version : 0;
 	}
 
 	private int saveSingleEvent(UUID aggregateId, int currentVersion, DomainEvent event) {
@@ -87,7 +85,7 @@ public class JdbcEventStore implements EventStore {
 
 			jdbcTemplate.update(
 					"INSERT INTO event_store (event_id, aggregate_id, aggregate_type, event_type, " +
-							"version, timestamp, event_data, trace_id, span_id) " +
+							"version, event_timestamp, event_data, trace_id, span_id) " +
 							"VALUES (?, ?, ?, ?, ?, ?, ?::jsonb, ?, ?)",
 					event.getEventId(),
 					aggregateId,

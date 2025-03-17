@@ -1,10 +1,14 @@
 package pl.ecommerce.customer.write.domain.aggregate;
 
 import lombok.Getter;
-import pl.ecommerce.commons.customer.model.*;
+import pl.ecommerce.commons.command.Command;
+import pl.ecommerce.commons.command.CommandHandler;
 import pl.ecommerce.commons.event.DomainEvent;
+import pl.ecommerce.commons.event.EventApplier;
 import pl.ecommerce.commons.event.customer.*;
+import pl.ecommerce.commons.model.customer.*;
 import pl.ecommerce.customer.write.domain.commands.*;
+import pl.ecommerce.customer.write.domain.handler.*;
 import pl.ecommerce.customer.write.infrastructure.exception.*;
 
 import java.time.Instant;
@@ -31,231 +35,88 @@ public class CustomerAggregate {
 	private int version = 0;
 	private final List<DomainEvent> uncommittedEvents = new ArrayList<>();
 
-	public CustomerAggregate(RegisterCustomerCommand command) {
-		if (command.email() == null || command.email().isBlank()) {
-			throw new InvalidCustomerDataException("Email is required");
-		}
-		if (command.firstName() == null || command.firstName().isBlank()) {
-			throw new InvalidCustomerDataException("First name is required");
-		}
-		if (command.lastName() == null || command.lastName().isBlank()) {
-			throw new InvalidCustomerDataException("Last name is required");
-		}
+	private final Map<Class<? extends DomainEvent>, EventApplier> eventAppliers = new HashMap<>();
+	private final Map<Class<?>, CommandHandler<?>> commandHandlers = new HashMap<>();
 
-		applyChange(new CustomerRegisteredEvent(
-				command.customerId(),
-				command.email(),
-				command.firstName(),
-				command.lastName(),
-				command.phoneNumber() != null ? command.phoneNumber() : null,
-				Instant.now(),
-				version
-		));
+	public CustomerAggregate(RegisterCustomerCommand command) {
+		initializeEventAppliers();
+		initializeCommandHandlers();
+		executeCommand(command);
 	}
 
 	public CustomerAggregate(List<DomainEvent> eventHistory) {
+		initializeEventAppliers();
+		initializeCommandHandlers();
 		eventHistory.forEach(this::apply);
 	}
 
 	public void updateBasicInfo(UpdateCustomerCommand command) {
-		assertCustomerActive();
-
-		Map<String, Object> changes = new HashMap<>();
-		boolean hasChanges = false;
-
-		if (command.firstName() != null && !command.firstName().equals(this.firstName)) {
-			changes.put("firstName", command.firstName());
-			hasChanges = true;
-		}
-
-		if (command.lastName() != null && !command.lastName().equals(this.lastName)) {
-			changes.put("lastName", command.lastName());
-			hasChanges = true;
-		}
-
-		if (command.phoneNumber() != null &&
-				(this.phoneNumber == null || !command.phoneNumber().equals(this.phoneNumber.value()))) {
-			changes.put("phoneNumber", command.phoneNumber());
-			changes.put("phoneVerified", false);
-			hasChanges = true;
-		}
-
-		if (hasChanges) {
-			applyChange(new CustomerUpdatedEvent(
-					this.id,
-					changes,
-					Instant.now(),
-					version
-			));
-		}
+		executeCommand(command);
 	}
 
 	public void changeEmail(ChangeCustomerEmailCommand command) {
-		assertCustomerActive();
-
-		if (command.newEmail() == null || command.newEmail().isBlank()) {
-			throw new InvalidCustomerDataException("New email cannot be empty");
-		}
-
-		if (command.newEmail().equals(this.email)) {
-			return;
-		}
-
-		applyChange(new CustomerEmailChangedEvent(
-				this.id,
-				this.email,
-				command.newEmail(),
-				Instant.now(),
-				version
-		));
+		executeCommand(command);
 	}
 
 	public void verifyEmail(VerifyCustomerEmailCommand command) {
-		assertCustomerActive();
-
-		if (this.emailVerified) {
-			return;
-		}
-
-		applyChange(new CustomerEmailVerifiedEvent(
-				this.id,
-				this.email,
-				Instant.now(),
-				version
-		));
+		executeCommand(command);
 	}
 
 	public void verifyPhoneNumber(VerifyCustomerPhoneCommand command) {
-		assertCustomerActive();
-
-		if (this.phoneVerified || this.phoneNumber == null) {
-			return;
-		}
-
-		applyChange(new CustomerPhoneVerifiedEvent(
-				this.id,
-				this.phoneNumber.value(),
-				Instant.now(),
-				version
-		));
+		executeCommand(command);
 	}
 
 	public void addShippingAddress(AddShippingAddressCommand command) {
-		assertCustomerActive();
-
-		UUID addressId = command.addressId() != null ? command.addressId() : UUID.randomUUID();
-
-		applyChange(new CustomerAddressAddedEvent(
-				this.id,
-				addressId,
-				command.addressType(),
-				command.buildingNumber(),
-				command.apartmentNumber(),
-				command.street(),
-				command.city(),
-				command.postalCode(),
-				command.country(),
-				command.state(),
-				command.isDefault(),
-				Instant.now(),
-				version
-		));
+		executeCommand(command);
 	}
 
 	public void updateShippingAddress(UpdateShippingAddressCommand command) {
-		assertCustomerActive();
-
-		boolean addressExists = shippingAddresses.stream()
-				.anyMatch(address -> address.getId().equals(command.addressId()));
-
-		if (!addressExists) {
-			throw new AddressNotFoundException(command.addressId());
-		}
-
-		applyChange(new CustomerAddressUpdatedEvent(
-				this.id,
-				command.addressId(),
-				command.buildingNumber(),
-				command.apartmentNumber(),
-				command.street(),
-				command.city(),
-				command.postalCode(),
-				command.country(),
-				command.state(),
-				command.isDefault(),
-				Instant.now(),
-				version
-		));
+		executeCommand(command);
 	}
 
 	public void removeShippingAddress(RemoveShippingAddressCommand command) {
-		assertCustomerActive();
-
-		boolean addressExists = shippingAddresses.stream()
-				.anyMatch(address -> address.getId().equals(command.addressId()));
-
-		if (!addressExists) {
-			throw new AddressNotFoundException(command.addressId());
-		}
-
-		if (defaultShippingAddressId != null && defaultShippingAddressId.equals(command.addressId())) {
-			throw new CannotRemoveDefaultAddressException(command.addressId());
-		}
-
-		applyChange(new CustomerAddressRemovedEvent(
-				this.id,
-				command.addressId(),
-				Instant.now(),
-				version
-		));
+		executeCommand(command);
 	}
 
 	public void updatePreferences(UpdateCustomerPreferencesCommand command) {
-		assertCustomerActive();
-		applyChange(new CustomerPreferencesUpdatedEvent(
-				this.id,
-				command.preferences(),
-				Instant.now(),
-				version
-		));
+		executeCommand(command);
 	}
 
 	public void deactivate(DeactivateCustomerCommand command) {
-		if (this.status == CustomerStatus.INACTIVE) {
-			return;
-		}
-
-		applyChange(new CustomerDeactivatedEvent(
-				this.id,
-				command.reason(),
-				Instant.now(),
-				version
-		));
+		executeCommand(command);
 	}
 
 	public void reactivate(ReactivateCustomerCommand command) {
-		if (this.status == CustomerStatus.ACTIVE) {
-			return;
-		}
-
-		applyChange(new CustomerReactivatedEvent(
-				this.id,
-				command.note(),
-				Instant.now(),
-				version
-		));
+		executeCommand(command);
 	}
 
 	public void delete(DeleteCustomerCommand command) {
-		applyChange(new CustomerDeletedEvent(
-				this.id,
-				this.email,
-				this.firstName,
-				this.lastName,
-				command.reason(),
-				Instant.now(),
-				version
-		));
+		executeCommand(command);
+	}
+
+	public void clearUncommittedEvents() {
+		uncommittedEvents.clear();
+	}
+
+	protected void applyChange(DomainEvent event) {
+		apply(event);
+		uncommittedEvents.add(event);
+		version++;
+	}
+
+	protected void apply(DomainEvent event) {
+		EventApplier applier = eventAppliers.get(event.getClass());
+		if (applier != null) {
+			applier.apply(event);
+		}
+	}
+
+	private <T extends Command> void executeCommand(T command) {
+		@SuppressWarnings("unchecked")
+		CommandHandler<T> handler = (CommandHandler<T>) commandHandlers.get(command.getClass());
+		if (handler != null) {
+			handler.handle(command);
+		}
 	}
 
 	private void assertCustomerActive() {
@@ -264,191 +125,196 @@ public class CustomerAggregate {
 		}
 	}
 
-	private void applyChange(DomainEvent event) {
-		apply(event);
-		uncommittedEvents.add(event);
-		version++;
-	}
+	private void initializeEventAppliers() {
+		eventAppliers.put(CustomerRegisteredEvent.class, event -> {
+			CustomerRegisteredEvent e = (CustomerRegisteredEvent) event;
+			this.id = e.getCustomerId();
+			this.email = e.getEmail();
+			this.firstName = e.getFirstName();
+			this.lastName = e.getLastName();
+			this.phoneNumber = e.getPhoneNumber() != null ? new PhoneNumber(e.getPhoneNumber()) : null;
+			this.status = CustomerStatus.ACTIVE;
+			this.emailVerified = false;
+			this.phoneVerified = false;
+			this.createdAt = e.getEventTimestamp();
+			this.updatedAt = e.getEventTimestamp();
+			this.preferences = CustomerPreferences.builder().build();
+		});
 
-	private void apply(DomainEvent event) {
-		if (event instanceof CustomerRegisteredEvent) {
-			apply((CustomerRegisteredEvent) event);
-		} else if (event instanceof CustomerUpdatedEvent) {
-			apply((CustomerUpdatedEvent) event);
-		} else if (event instanceof CustomerEmailChangedEvent) {
-			apply((CustomerEmailChangedEvent) event);
-		} else if (event instanceof CustomerEmailVerifiedEvent) {
-			apply((CustomerEmailVerifiedEvent) event);
-		} else if (event instanceof CustomerPhoneVerifiedEvent) {
-			apply((CustomerPhoneVerifiedEvent) event);
-		} else if (event instanceof CustomerAddressAddedEvent) {
-			apply((CustomerAddressAddedEvent) event);
-		} else if (event instanceof CustomerAddressUpdatedEvent) {
-			apply((CustomerAddressUpdatedEvent) event);
-		} else if (event instanceof CustomerAddressRemovedEvent) {
-			apply((CustomerAddressRemovedEvent) event);
-		} else if (event instanceof CustomerPreferencesUpdatedEvent) {
-			apply((CustomerPreferencesUpdatedEvent) event);
-		} else if (event instanceof CustomerDeactivatedEvent) {
-			apply((CustomerDeactivatedEvent) event);
-		} else if (event instanceof CustomerReactivatedEvent) {
-			apply((CustomerReactivatedEvent) event);
-		} else if (event instanceof CustomerDeletedEvent) {
-			apply((CustomerDeletedEvent) event);
-		}
-	}
+		eventAppliers.put(CustomerUpdatedEvent.class, event -> {
+			CustomerUpdatedEvent e = (CustomerUpdatedEvent) event;
+			Map<String, Object> changes = e.getChanges();
 
-	private void apply(CustomerRegisteredEvent event) {
-		this.id = event.getCustomerId();
-		this.email = event.getEmail();
-		this.firstName = event.getFirstName();
-		this.lastName = event.getLastName();
-		this.phoneNumber = event.getPhoneNumber() != null ? new PhoneNumber(event.getPhoneNumber()) : null;
-		this.status = CustomerStatus.ACTIVE;
-		this.emailVerified = false;
-		this.phoneVerified = false;
-		this.createdAt = event.getTimestamp();
-		this.updatedAt = event.getTimestamp();
-		this.preferences = CustomerPreferences.builder().build();
-	}
-
-	private void apply(CustomerUpdatedEvent event) {
-		Map<String, Object> changes = event.getChanges();
-
-		if (changes.containsKey("firstName")) {
-			this.firstName = (String) changes.get("firstName");
-		}
-
-		if (changes.containsKey("lastName")) {
-			this.lastName = (String) changes.get("lastName");
-		}
-
-		if (changes.containsKey("phoneNumber")) {
-			this.phoneNumber = new PhoneNumber((String) changes.get("phoneNumber"));
-		}
-
-		if (changes.containsKey("phoneVerified")) {
-			this.phoneVerified = (Boolean) changes.get("phoneVerified");
-		}
-
-		this.updatedAt = event.getTimestamp();
-	}
-
-	private void apply(CustomerEmailChangedEvent event) {
-		this.email = event.getNewEmail();
-		this.emailVerified = false;
-		this.updatedAt = event.getTimestamp();
-	}
-
-	private void apply(CustomerEmailVerifiedEvent event) {
-		this.emailVerified = true;
-		this.updatedAt = event.getTimestamp();
-	}
-
-	private void apply(CustomerPhoneVerifiedEvent event) {
-		this.phoneVerified = true;
-		this.updatedAt = event.getTimestamp();
-	}
-
-	private void apply(CustomerAddressAddedEvent event) {
-		Address newAddress = new Address(
-				event.getAddressId(),
-				event.getAddressType(),
-				event.getStreet(),
-				event.getBuildingNumber(),
-				event.getApartmentNumber(),
-				event.getCity(),
-				event.getState(),
-				event.getPostalCode(),
-				event.getCountry(),
-				event.isDefault()
-		);
-
-		if (AddressType.BILLING.equals(event.getAddressType())) {
-			this.billingAddress = newAddress;
-		} else {
-			this.shippingAddresses.add(newAddress);
-
-			if (event.isDefault() || this.defaultShippingAddressId == null) {
-				this.defaultShippingAddressId = newAddress.getId();
+			if (changes.containsKey("firstName")) {
+				this.firstName = (String) changes.get("firstName");
 			}
-		}
 
-		this.updatedAt = event.getTimestamp();
-	}
+			if (changes.containsKey("lastName")) {
+				this.lastName = (String) changes.get("lastName");
+			}
 
-	private void apply(CustomerAddressUpdatedEvent event) {
-		if (this.billingAddress != null && this.billingAddress.getId().equals(event.getAddressId())) {
-			this.billingAddress = new Address(
-					event.getAddressId(),
-					AddressType.BILLING,
-					event.getStreet(),
-					event.getBuildingNumber(),
-					event.getApartmentNumber(),
-					event.getCity(),
-					event.getState(),
-					event.getPostalCode(),
-					event.getCountry(),
-					event.isDefault()
+			if (changes.containsKey("phoneNumber")) {
+				this.phoneNumber = new PhoneNumber((String) changes.get("phoneNumber"));
+			}
+
+			if (changes.containsKey("phoneVerified")) {
+				this.phoneVerified = (Boolean) changes.get("phoneVerified");
+			}
+
+			this.updatedAt = e.getTimestamp();
+		});
+
+		eventAppliers.put(CustomerEmailChangedEvent.class, event -> {
+			CustomerEmailChangedEvent e = (CustomerEmailChangedEvent) event;
+			this.email = e.getNewEmail();
+			this.emailVerified = false;
+			this.updatedAt = e.getTimestamp();
+		});
+
+		eventAppliers.put(CustomerEmailVerifiedEvent.class, event -> {
+			this.emailVerified = true;
+			this.updatedAt = event.getTimestamp();
+		});
+
+		eventAppliers.put(CustomerPhoneVerifiedEvent.class, event -> {
+			this.phoneVerified = true;
+			this.updatedAt = event.getTimestamp();
+		});
+
+		eventAppliers.put(CustomerAddressAddedEvent.class, event -> {
+			CustomerAddressAddedEvent e = (CustomerAddressAddedEvent) event;
+			Address newAddress = new Address(
+					e.getAddressId(),
+					e.getAddressType(),
+					e.getStreet(),
+					e.getBuildingNumber(),
+					e.getApartmentNumber(),
+					e.getCity(),
+					e.getState(),
+					e.getPostalCode(),
+					e.getCountry(),
+					e.isDefault()
 			);
-		} else {
-			for (int i = 0; i < this.shippingAddresses.size(); i++) {
-				if (this.shippingAddresses.get(i).getId().equals(event.getAddressId())) {
-					this.shippingAddresses.set(i, new Address(
-							event.getAddressId(),
-							AddressType.SHIPPING,
-							event.getStreet(),
-							event.getBuildingNumber(),
-							event.getApartmentNumber(),
-							event.getCity(),
-							event.getState(),
-							event.getPostalCode(),
-							event.getCountry(),
-							event.isDefault()
-					));
-					break;
+
+			if (AddressType.BILLING.equals(e.getAddressType())) {
+				this.billingAddress = newAddress;
+			} else {
+				this.shippingAddresses.add(newAddress);
+
+				if (e.isDefault() || this.defaultShippingAddressId == null) {
+					this.defaultShippingAddressId = newAddress.getId();
 				}
 			}
-		}
 
-		if (event.isDefault()) {
-			this.defaultShippingAddressId = event.getAddressId();
-		}
+			this.updatedAt = e.getEventTimestamp();
+		});
 
-		this.updatedAt = event.getTimestamp();
+		eventAppliers.put(CustomerAddressUpdatedEvent.class, event -> {
+			CustomerAddressUpdatedEvent e = (CustomerAddressUpdatedEvent) event;
+			if (this.billingAddress != null && this.billingAddress.getId().equals(e.getAddressId())) {
+				this.billingAddress = new Address(
+						e.getAddressId(),
+						AddressType.BILLING,
+						e.getStreet(),
+						e.getBuildingNumber(),
+						e.getApartmentNumber(),
+						e.getCity(),
+						e.getState(),
+						e.getPostalCode(),
+						e.getCountry(),
+						e.isDefault()
+				);
+			} else {
+				for (int i = 0; i < this.shippingAddresses.size(); i++) {
+					if (this.shippingAddresses.get(i).getId().equals(e.getAddressId())) {
+						this.shippingAddresses.set(i, new Address(
+								e.getAddressId(),
+								AddressType.SHIPPING,
+								e.getStreet(),
+								e.getBuildingNumber(),
+								e.getApartmentNumber(),
+								e.getCity(),
+								e.getState(),
+								e.getPostalCode(),
+								e.getCountry(),
+								e.isDefault()
+						));
+						break;
+					}
+				}
+			}
+
+			if (e.isDefault()) {
+				this.defaultShippingAddressId = e.getAddressId();
+			}
+
+			this.updatedAt = e.getTimestamp();
+		});
+
+		eventAppliers.put(CustomerAddressRemovedEvent.class, event -> {
+			CustomerAddressRemovedEvent e = (CustomerAddressRemovedEvent) event;
+			this.shippingAddresses.removeIf(address -> address.getId().equals(e.getAddressId()));
+
+			if (this.defaultShippingAddressId != null && this.defaultShippingAddressId.equals(e.getAddressId())) {
+				this.defaultShippingAddressId = this.shippingAddresses.isEmpty() ? null : this.shippingAddresses.getFirst().getId();
+			}
+
+			this.updatedAt = e.getTimestamp();
+		});
+
+		eventAppliers.put(CustomerPreferencesUpdatedEvent.class, event -> {
+			CustomerPreferencesUpdatedEvent e = (CustomerPreferencesUpdatedEvent) event;
+			this.preferences = e.getPreferences();
+			this.updatedAt = e.getEventTimestamp();
+		});
+
+		eventAppliers.put(CustomerDeactivatedEvent.class, event -> {
+			this.status = CustomerStatus.INACTIVE;
+			this.updatedAt = event.getTimestamp();
+		});
+
+		eventAppliers.put(CustomerReactivatedEvent.class, event -> {
+			this.status = CustomerStatus.ACTIVE;
+			this.updatedAt = event.getTimestamp();
+		});
+
+		eventAppliers.put(CustomerDeletedEvent.class, event -> {
+			this.status = CustomerStatus.DELETED;
+			this.updatedAt = event.getTimestamp();
+		});
 	}
 
-	private void apply(CustomerAddressRemovedEvent event) {
-		this.shippingAddresses.removeIf(address -> address.getId().equals(event.getAddressId()));
-
-		if (this.defaultShippingAddressId != null && this.defaultShippingAddressId.equals(event.getAddressId())) {
-			this.defaultShippingAddressId = this.shippingAddresses.isEmpty() ? null : this.shippingAddresses.getFirst().getId();
-		}
-
-		this.updatedAt = event.getTimestamp();
+	private void initializeCommandHandlers() {
+		commandHandlers.put(RegisterCustomerCommand.class, new RegisterCustomerCommandHandler(this));
+		commandHandlers.put(UpdateCustomerCommand.class, new UpdateCustomerCommandHandler(this));
+		commandHandlers.put(ChangeCustomerEmailCommand.class, new ChangeCustomerEmailCommandHandler(this));
+		commandHandlers.put(VerifyCustomerEmailCommand.class, new VerifyCustomerEmailCommandHandler(this));
+		commandHandlers.put(VerifyCustomerPhoneCommand.class, new VerifyCustomerPhoneCommandHandler(this));
+		commandHandlers.put(AddShippingAddressCommand.class, new AddShippingAddressCommandHandler(this));
+		commandHandlers.put(UpdateShippingAddressCommand.class, new UpdateShippingAddressCommandHandler(this));
+		commandHandlers.put(RemoveShippingAddressCommand.class, new RemoveShippingAddressCommandHandler(this));
+		commandHandlers.put(UpdateCustomerPreferencesCommand.class, new UpdateCustomerPreferencesCommandHandler(this));
+		commandHandlers.put(DeactivateCustomerCommand.class, new DeactivateCustomerCommandHandler(this));
+		commandHandlers.put(ReactivateCustomerCommand.class, new ReactivateCustomerCommandHandler(this));
+		commandHandlers.put(DeleteCustomerCommand.class, new DeleteCustomerCommandHandler(this));
 	}
 
-	private void apply(CustomerPreferencesUpdatedEvent event) {
-		this.preferences = event.getPreferences();
-		this.updatedAt = event.getTimestamp();
+	public interface AggregateHelper {
+		void applyChange(DomainEvent event);
+		void assertCustomerActive();
 	}
 
-	private void apply(CustomerDeactivatedEvent event) {
-		this.status = CustomerStatus.INACTIVE;
-		this.updatedAt = event.getTimestamp();
-	}
+	public AggregateHelper getHelper() {
+		return new AggregateHelper() {
+			@Override
+			public void applyChange(DomainEvent event) {
+				CustomerAggregate.this.applyChange(event);
+			}
 
-	private void apply(CustomerReactivatedEvent event) {
-		this.status = CustomerStatus.ACTIVE;
-		this.updatedAt = event.getTimestamp();
-	}
-
-	private void apply(CustomerDeletedEvent event) {
-		this.status = CustomerStatus.DELETED;
-		this.updatedAt = event.getTimestamp();
-	}
-
-	public void clearUncommittedEvents() {
-		uncommittedEvents.clear();
+			@Override
+			public void assertCustomerActive() {
+				CustomerAggregate.this.assertCustomerActive();
+			}
+		};
 	}
 }

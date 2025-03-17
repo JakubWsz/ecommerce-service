@@ -7,8 +7,8 @@ import org.springframework.data.mongodb.core.query.Criteria;
 import org.springframework.data.mongodb.core.query.Query;
 import org.springframework.data.mongodb.core.query.Update;
 import org.springframework.stereotype.Component;
-import pl.ecommerce.commons.customer.model.Address;
-import pl.ecommerce.commons.customer.model.CustomerStatus;
+import pl.ecommerce.commons.model.customer.Address;
+import pl.ecommerce.commons.model.customer.CustomerStatus;
 import pl.ecommerce.commons.event.customer.*;
 import pl.ecommerce.commons.kafka.DomainEventHandler;
 import pl.ecommerce.commons.kafka.EventHandler;
@@ -36,7 +36,7 @@ public class CustomerEventProjector extends DomainEventHandler {
 
 	@EventHandler
 	public void on(CustomerRegisteredEvent event) {
-		String traceId = extractTraceId(event);
+		String traceId = event.extractTraceId();
 		log.info("Projecting CustomerRegisteredEvent for customer: {}, traceId: {}",
 				event.getAggregateId(), traceId);
 
@@ -51,7 +51,7 @@ public class CustomerEventProjector extends DomainEventHandler {
 
 	@EventHandler
 	public void on(CustomerUpdatedEvent event) {
-		String traceId = extractTraceId(event);
+		String traceId = event.extractTraceId();
 		log.info("Projecting CustomerUpdatedEvent for customer: {}, traceId: {}",
 				event.getAggregateId(), traceId);
 
@@ -68,7 +68,7 @@ public class CustomerEventProjector extends DomainEventHandler {
 
 	@EventHandler
 	public void on(CustomerEmailChangedEvent event) {
-		String traceId = extractTraceId(event);
+		String traceId = event.extractTraceId();
 		log.info("Projecting CustomerEmailChangedEvent for customer: {}, traceId: {}",
 				event.getAggregateId(), traceId);
 
@@ -85,7 +85,7 @@ public class CustomerEventProjector extends DomainEventHandler {
 
 	@EventHandler
 	public void on(CustomerEmailVerifiedEvent event) {
-		String traceId = extractTraceId(event);
+		String traceId = event.extractTraceId();
 		log.info("Projecting CustomerEmailVerifiedEvent for customer: {}, traceId: {}",
 				event.getAggregateId(), traceId);
 
@@ -102,7 +102,7 @@ public class CustomerEventProjector extends DomainEventHandler {
 
 	@EventHandler
 	public void on(CustomerAddressAddedEvent event) {
-		String traceId = extractTraceId(event);
+		String traceId = event.extractTraceId();
 		log.info("Projecting CustomerAddressAddedEvent for customer: {}, traceId: {}",
 				event.getAggregateId(), traceId);
 
@@ -120,7 +120,7 @@ public class CustomerEventProjector extends DomainEventHandler {
 
 	@EventHandler
 	public void on(CustomerAddressUpdatedEvent event) {
-		String traceId = extractTraceId(event);
+		String traceId = event.extractTraceId();
 		log.info("Projecting CustomerAddressUpdatedEvent for customer: {}, traceId: {}",
 				event.getAggregateId(), traceId);
 
@@ -136,7 +136,7 @@ public class CustomerEventProjector extends DomainEventHandler {
 
 	@EventHandler
 	public void on(CustomerAddressRemovedEvent event) {
-		String traceId = extractTraceId(event);
+		String traceId = event.extractTraceId();
 		log.info("Projecting CustomerAddressRemovedEvent for customer: {}, traceId: {}",
 				event.getAggregateId(), traceId);
 
@@ -152,7 +152,7 @@ public class CustomerEventProjector extends DomainEventHandler {
 
 	@EventHandler
 	public void on(CustomerPreferencesUpdatedEvent event) {
-		String traceId = extractTraceId(event);
+		String traceId = event.extractTraceId();
 		log.info("Projecting CustomerPreferencesUpdatedEvent for customer: {}, traceId: {}",
 				event.getAggregateId(), traceId);
 
@@ -171,7 +171,7 @@ public class CustomerEventProjector extends DomainEventHandler {
 
 	@EventHandler
 	public void on(CustomerDeactivatedEvent event) {
-		String traceId = extractTraceId(event);
+		String traceId = event.extractTraceId();
 		log.info("Projecting CustomerDeactivatedEvent for customer: {}, traceId: {}",
 				event.getAggregateId(), traceId);
 
@@ -188,7 +188,7 @@ public class CustomerEventProjector extends DomainEventHandler {
 
 	@EventHandler
 	public void on(CustomerReactivatedEvent event) {
-		String traceId = extractTraceId(event);
+		String traceId = event.extractTraceId();
 		log.info("Projecting CustomerReactivatedEvent for customer: {}, traceId: {}",
 				event.getAggregateId(), traceId);
 
@@ -197,7 +197,7 @@ public class CustomerEventProjector extends DomainEventHandler {
 				.set("status", CustomerStatus.ACTIVE)
 				.set("updatedAt", event.getTimestamp())
 				.set("lastTraceId", traceId)
-				.set("lastSpanId", event.getTracingContext() != null ? event.getTracingContext().getSpanId() : null)
+				.set("lastSpanId", event.extractSpanId())
 				.set("lastOperation", "ReactivateCustomer")
 				.set("lastUpdatedAt", Instant.now());
 
@@ -211,7 +211,7 @@ public class CustomerEventProjector extends DomainEventHandler {
 
 	@EventHandler
 	public void on(CustomerDeletedEvent event) {
-		String traceId = extractTraceId(event);
+		String traceId = event.extractTraceId();
 		log.info("Projecting CustomerDeletedEvent for customer: {}, traceId: {}",
 				event.getAggregateId(), traceId);
 
@@ -220,7 +220,7 @@ public class CustomerEventProjector extends DomainEventHandler {
 				.set("status", CustomerStatus.DELETED)
 				.set("updatedAt", event.getTimestamp())
 				.set("lastTraceId", traceId)
-				.set("lastSpanId", event.getTracingContext() != null ? event.getTracingContext().getSpanId() : null)
+				.set("lastSpanId", event.extractSpanId())
 				.set("lastOperation", "DeleteCustomer")
 				.set("lastUpdatedAt", Instant.now());
 

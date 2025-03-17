@@ -13,7 +13,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ServerWebExchange;
-import pl.ecommerce.commons.customer.model.CustomerStatus;
+import pl.ecommerce.commons.model.customer.CustomerStatus;
 import pl.ecommerce.commons.tracing.TracingContext;
 import pl.ecommerce.customer.read.aplication.dto.CustomerResponse;
 import pl.ecommerce.customer.read.aplication.dto.CustomerSummary;

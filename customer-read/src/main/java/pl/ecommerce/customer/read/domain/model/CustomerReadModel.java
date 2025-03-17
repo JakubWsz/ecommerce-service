@@ -6,16 +6,13 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 import org.springframework.data.annotation.Id;
 import org.springframework.data.mongodb.core.mapping.Document;
-import pl.ecommerce.commons.customer.model.Address;
-import pl.ecommerce.commons.customer.model.CustomerPreferences;
-import pl.ecommerce.commons.customer.model.CustomerStatus;
+import org.springframework.data.mongodb.core.mapping.Field;
+import pl.ecommerce.commons.model.customer.Address;
+import pl.ecommerce.commons.model.customer.CustomerPreferences;
+import pl.ecommerce.commons.model.customer.CustomerStatus;
 
 import java.time.Instant;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
+import java.util.*;
 
 @Data
 @Builder
@@ -24,6 +21,7 @@ import java.util.UUID;
 @Document(collection = "customers")
 public class CustomerReadModel {
 	@Id
+	@Field("_id")
 	private UUID id;
 	private String email;
 	private String firstName;

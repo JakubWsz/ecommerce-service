@@ -3,7 +3,7 @@ package pl.ecommerce.customer.read.aplication.dto;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Builder;
 import lombok.Data;
-import pl.ecommerce.commons.customer.model.CustomerStatus;
+import pl.ecommerce.commons.model.customer.CustomerStatus;
 
 import java.time.Instant;
 import java.util.UUID;

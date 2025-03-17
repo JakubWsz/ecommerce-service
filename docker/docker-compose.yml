@@ -176,9 +176,9 @@ services:
       retries: 5
       start_period: 30s
 
-  # AKHQ (Kafka GUI) - zamiana Kafdropa na AKHQ
+  # AKHQ (Kafka GUI)
   akhq:
-    image: akhq/akhq:latest
+    image: tchiotludo/akhq:latest
     container_name: ecommerce-akhq
     depends_on:
       kafka:
@@ -186,21 +186,29 @@ services:
     ports:
       - "9000:9000"
     environment:
-      # Minimalna konfiguracja AKHQ
-      AKHQ_CONFIG_JSON: >
-        {
-          "connections": {
-            "kafka": {
-              "properties": {
-                "bootstrap.servers": "kafka:9092"
-              }
-            }
-          }
-        }
+      AKHQ_CONFIGURATION: |
+        micronaut:
+          server:
+            port: 9000
+        akhq:
+          connections:
+            kafka:
+              properties:
+                bootstrap.servers: "kafka:9092"
     networks:
       - kafka-network
 
+
   ### LOGGING & MONITORING STACK ###
+
+  # Zipkin
+  zipkin:
+    image: openzipkin/zipkin:latest
+    container_name: ecommerce-zipkin
+    ports:
+      - "9411:9411"
+    networks:
+      - backend-network
 
   # Elasticsearch
   elasticsearch:

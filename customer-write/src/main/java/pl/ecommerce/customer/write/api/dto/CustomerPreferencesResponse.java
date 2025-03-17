@@ -1,7 +1,7 @@
 package pl.ecommerce.customer.write.api.dto;
 
 import io.swagger.v3.oas.annotations.media.Schema;
-import pl.ecommerce.commons.customer.model.CustomerPreferences;
+import pl.ecommerce.commons.model.customer.CustomerPreferences;
 
 import java.util.UUID;
 

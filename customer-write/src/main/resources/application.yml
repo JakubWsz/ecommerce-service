@@ -26,10 +26,11 @@ spring:
 
   # Kafka configuration for event publishing
   kafka:
-    bootstrap-servers: localhost:9092
+    bootstrap-servers: localhost:29092
+    schema-registry-url: http://localhost:8081
     producer:
-      key-serializer: org.apache.kafka.common.serialization.StringSerializer
-      value-serializer: org.apache.kafka.common.serialization.StringSerializer
+#      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+#      value-serializer: org.apache.kafka.common.serialization.JsonSerializer
       acks: all
       retries: 3
       properties:
@@ -91,9 +92,10 @@ spring:
     activate:
       on-profile: dev
 
-  # Kafka configuration for development
-  kafka:
-    bootstrap-servers: localhost:9092
+  datasource:
+    url: jdbc:postgresql://localhost:5432/customer
+    username: postgres
+    password: postgres
 
 # Logging configuration for dev
 logging:

@@ -38,7 +38,9 @@ public class EventSourcedCustomerRepository implements CustomerRepository {
 
 		return Mono.fromCallable(() -> persistEvents(customer, uncommittedEvents))
 				.flatMap(savedCustomer -> publishEvents(uncommittedEvents)
+						.then(Mono.fromRunnable(savedCustomer::clearUncommittedEvents))
 						.thenReturn(savedCustomer));
+
 	}
 
 	@Override
@@ -90,16 +92,14 @@ public class EventSourcedCustomerRepository implements CustomerRepository {
 		log.debug("Saved aggregate {} with {} events, traceId: {}",
 				customer.getId(), events.size(), traceId);
 
-		customer.clearUncommittedEvents();
 		return customer;
 	}
 
 	private Mono<Void> publishEvents(List<DomainEvent> events) {
-		return Flux.concat(Flux.fromIterable(events)
-						.map(event -> eventPublisher.publish(
-								event,
-								event.getEventType(),
-								createHeaders(event))))
+		return Flux.fromIterable(events)
+				.doOnNext(event -> log.info("Publishing event: {} with type: {}", event.getClass().getSimpleName(), event.getEventType()))
+				.flatMap(event -> eventPublisher.publish(event, event.getEventType(), createHeaders(event)))
+				.doOnError(e -> log.error("Error publishing event", e))
 				.then();
 	}
 

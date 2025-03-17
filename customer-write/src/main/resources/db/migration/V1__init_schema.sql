@@ -4,7 +4,7 @@ CREATE TABLE IF NOT EXISTS event_store (
                                            aggregate_type VARCHAR(255) NOT NULL,
                                            event_type VARCHAR(255) NOT NULL,
                                            version INT NOT NULL,
-                                           timestamp TIMESTAMP NOT NULL,
+                                           event_timestamp  TIMESTAMP NOT NULL,
                                            event_data JSONB NOT NULL,
                                            trace_id VARCHAR(100),
                                            span_id VARCHAR(100),
@@ -16,7 +16,7 @@ CREATE TABLE IF NOT EXISTS event_store (
 CREATE INDEX IF NOT EXISTS idx_event_store_aggregate_id ON event_store (aggregate_id);
 CREATE INDEX IF NOT EXISTS idx_event_store_aggregate_type ON event_store (aggregate_type);
 CREATE INDEX IF NOT EXISTS idx_event_store_event_type ON event_store (event_type);
-CREATE INDEX IF NOT EXISTS idx_event_store_timestamp ON event_store (timestamp);
+CREATE INDEX IF NOT EXISTS idx_event_store_event_timestamp  ON event_store (event_timestamp );
 CREATE INDEX IF NOT EXISTS idx_event_store_trace_id ON event_store (trace_id);
 CREATE INDEX IF NOT EXISTS idx_event_store_deleted ON event_store (deleted);
 
@@ -27,7 +27,7 @@ WITH latest_events AS (
         e.event_type,
         e.event_data->>'email' AS email,
         e.version,
-        e.timestamp,
+        e.event_timestamp,
         e.trace_id,
         ROW_NUMBER() OVER (
             PARTITION BY e.aggregate_id
@@ -45,7 +45,7 @@ SELECT
     customer_id,
     email::TEXT AS email,
     version,
-    timestamp,
+    event_timestamp ,
     trace_id
 FROM latest_events
 WHERE rn = 1;
@@ -62,7 +62,7 @@ WITH latest_status AS (
             ELSE NULL
             END as status,
         e.version,
-        e.timestamp,
+        e.event_timestamp ,
         e.trace_id,
         ROW_NUMBER() OVER (
             PARTITION BY e.aggregate_id
@@ -125,7 +125,7 @@ SELECT
     n.first_name::TEXT AS first_name,
     n.last_name::TEXT AS last_name,
     s.status,
-    s.timestamp as last_updated,
+    s.event_timestamp  as last_updated,
     s.trace_id as last_trace_id
 FROM latest_status s
          LEFT JOIN latest_email e ON s.customer_id = e.customer_id AND e.rn = 1
@@ -137,7 +137,7 @@ CREATE OR REPLACE FUNCTION get_customer_events(p_customer_id UUID)
                       event_id UUID,
                       event_type VARCHAR(255),
                       version INT,
-                      timestamp TIMESTAMP,
+                      event_timestamp  TIMESTAMP,
                       event_data JSONB,
                       trace_id VARCHAR(100),
                       span_id VARCHAR(100)
@@ -148,7 +148,7 @@ BEGIN
             e.event_id,
             e.event_type,
             e.version,
-            e.timestamp,
+            e.event_timestamp ,
             e.event_data,
             e.trace_id,
             e.span_id
@@ -166,14 +166,14 @@ SELECT
     e.aggregate_id as customer_id,
     e.event_type,
     e.version,
-    e.timestamp,
+    e.event_timestamp ,
     e.trace_id,
     e.span_id,
     e.user_id
 FROM event_store e
 WHERE e.aggregate_type = 'Customer'
   AND e.deleted = false
-ORDER BY e.timestamp DESC;
+ORDER BY e.event_timestamp  DESC;
 
 CREATE INDEX IF NOT EXISTS idx_event_store_customer_email
     ON event_store ((event_data->>'email'))
