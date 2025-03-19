@@ -9,7 +9,9 @@ import java.util.concurrent.ConcurrentHashMap;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 
+@Slf4j
 @Data
 @NoArgsConstructor
 public class TracingContext {
@@ -103,7 +105,7 @@ public class TracingContext {
 			try {
 				timestamp = Instant.parse(timestampStr);
 			} catch (Exception e) {
-				// If parsing fails, we'll use current time
+				log.info(e.getMessage());
 			}
 		}
 
