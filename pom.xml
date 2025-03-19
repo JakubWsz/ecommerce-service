@@ -20,7 +20,8 @@
         <module>customer-read</module>
         <module>vendor-write</module>
         <module>vendor-read</module>
-        <module>product</module>
+        <module>product-write</module>
+        <module>product-read</module>
         <!-- <module>order</module> -->
         <!-- <module>payment</module> -->
         <!-- <module>shipping</module> -->
