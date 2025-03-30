@@ -12,10 +12,12 @@ import java.util.UUID;
 @NoArgsConstructor
 @Message("customer.reactivated.event")
 public class CustomerReactivatedEvent extends CustomerEvent {
+	private String note;
 
 	@Builder
 	public CustomerReactivatedEvent(UUID customerId,String note,
 									Instant timestamp, int version) {
 		super(customerId, version, timestamp);
+		this.note= note;
 	}
 }

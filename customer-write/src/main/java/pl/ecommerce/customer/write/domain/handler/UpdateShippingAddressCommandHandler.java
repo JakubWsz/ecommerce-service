@@ -37,7 +37,7 @@ public class UpdateShippingAddressCommandHandler implements CommandHandler<Updat
 				command.city(),
 				command.postalCode(),
 				command.country(),
-				command.state(),
+				command.voivodeship(),
 				command.isDefault(),
 				Instant.now(),
 				aggregate.getVersion()

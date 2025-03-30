@@ -25,9 +25,6 @@ public class ProductSearchService {
 
 	private final ReactiveMongoTemplate mongoTemplate;
 
-	/**
-	 * Wyszukiwanie zaawansowane z wieloma filtrami i sortowaniem
-	 */
 	public Mono<Page<ProductSummary>> advancedSearch(
 			String searchText,
 			List<UUID> categoryIds,
@@ -46,15 +43,11 @@ public class ProductSearchService {
 		log.debug("Performing advanced product search, traceId: {}",
 				tracingContext != null ? tracingContext.getTraceId() : "unknown");
 
-		// Budowanie kryteriów wyszukiwania
 		List<Criteria> criteriaList = new ArrayList<>();
 
-		// Zawsze uwzględniamy tylko aktywne produkty
 		criteriaList.add(Criteria.where("status").is("ACTIVE"));
 
-		// Wyszukiwanie pełnotekstowe
 		if (searchText != null && !searchText.trim().isEmpty()) {
-			// Użycie wyrażenia regularnego dla elastyczności wyszukiwania
 			String pattern = ".*" + searchText + ".*";
 			criteriaList.add(new Criteria().orOperator(
 					Criteria.where("name").regex(pattern, "i"),
@@ -65,62 +58,50 @@ public class ProductSearchService {
 			));
 		}
 
-		// Filtrowanie po kategoriach
 		if (categoryIds != null && !categoryIds.isEmpty()) {
 			criteriaList.add(Criteria.where("categoryIds").in(categoryIds));
 		}
 
-		// Filtrowanie po dostawcach
 		if (vendorIds != null && !vendorIds.isEmpty()) {
 			criteriaList.add(Criteria.where("vendorId").in(vendorIds));
 		}
 
-		// Filtrowanie po markach
 		if (brandNames != null && !brandNames.isEmpty()) {
 			criteriaList.add(Criteria.where("brandName").in(brandNames));
 		}
 
-		// Filtrowanie po cenie minimalnej
 		if (minPrice != null) {
 			criteriaList.add(Criteria.where("price.currentPrice").gte(minPrice));
 		}
 
-		// Filtrowanie po cenie maksymalnej
 		if (maxPrice != null) {
 			criteriaList.add(Criteria.where("price.currentPrice").lte(maxPrice));
 		}
 
-		// Tylko produkty przecenione
 		if (onlyDiscounted != null && onlyDiscounted) {
 			criteriaList.add(Criteria.where("price.discounted").ne(null));
 		}
 
-		// Tylko produkty dostępne w magazynie
 		if (inStock != null && inStock) {
 			criteriaList.add(Criteria.where("stock.available").gt(0));
 		}
 
-		// Filtrowanie po atrybutach produktu
 		if (attributeName != null && !attributeName.isEmpty()) {
 			if (attributeValue != null && !attributeValue.isEmpty()) {
-				// Szukamy konkretnej wartości atrybutu
 				criteriaList.add(Criteria.where("attributes").elemMatch(
 						Criteria.where("name").is(attributeName).and("value").is(attributeValue)
 				));
 			} else {
-				// Szukamy produktów mających atrybut o podanej nazwie
 				criteriaList.add(Criteria.where("attributes").elemMatch(
 						Criteria.where("name").is(attributeName)
 				));
 			}
 		}
 
-		// Tylko produkty wyróżnione
 		if (featured != null) {
 			criteriaList.add(Criteria.where("featured").is(featured));
 		}
 
-		// Łączymy wszystkie kryteria operatorem AND
 		Criteria combinedCriteria = new Criteria();
 		if (!criteriaList.isEmpty()) {
 			combinedCriteria = combinedCriteria.andOperator(
@@ -128,14 +109,11 @@ public class ProductSearchService {
 			);
 		}
 
-		// Tworzymy zapytanie z połączonymi kryteriami
 		Query searchQuery = new Query(combinedCriteria);
 
-		// Dodajemy paginację
 		Query countQuery = Query.of(searchQuery).skip(0).limit(0);
 		searchQuery.with(pageable);
 
-		// Wykonujemy zapytanie
 		String traceId = tracingContext != null ? tracingContext.getTraceId() : "unknown";
 		return mongoTemplate.count(countQuery, ProductReadModel.class)
 				.flatMap(count ->
@@ -150,9 +128,6 @@ public class ProductSearchService {
 				);
 	}
 
-	/**
-	 * Wyszukiwanie podobnych produktów na podstawie cech, kategorii i ceny
-	 */
 	public Mono<List<ProductSummary>> findSimilarProducts(
 			UUID productId,
 			int limit,
@@ -163,26 +138,20 @@ public class ProductSearchService {
 
 		return mongoTemplate.findById(productId, ProductReadModel.class)
 				.flatMap(product -> {
-					// Budowanie kryteriów podobieństwa
 					List<Criteria> similarityCriteria = new ArrayList<>();
 
-					// Musi być aktywny
 					similarityCriteria.add(Criteria.where("status").is("ACTIVE"));
 
-					// Wykluczamy ten sam produkt
 					similarityCriteria.add(Criteria.where("_id").ne(productId));
 
-					// Produkty w tych samych kategoriach
 					if (!product.getCategoryIds().isEmpty()) {
 						similarityCriteria.add(Criteria.where("categoryIds").in(product.getCategoryIds()));
 					}
 
-					// Produkty tej samej marki
 					if (product.getBrandName() != null && !product.getBrandName().isEmpty()) {
 						similarityCriteria.add(Criteria.where("brandName").is(product.getBrandName()));
 					}
 
-					// Produkty w podobnym przedziale cenowym (+/- 20%)
 					BigDecimal currentPrice = product.getPrice().getCurrentPrice();
 					BigDecimal lowerPriceRange = currentPrice.multiply(new BigDecimal("0.8"));
 					BigDecimal upperPriceRange = currentPrice.multiply(new BigDecimal("1.2"));
@@ -194,13 +163,11 @@ public class ProductSearchService {
 							)
 					);
 
-					// Budowanie zapytania
 					Criteria combinedCriteria = new Criteria().andOperator(
 							similarityCriteria.toArray(new Criteria[0])
 					);
 					Query query = new Query(combinedCriteria).limit(limit);
 
-					// Wykonanie zapytania
 					return mongoTemplate.find(query, ProductReadModel.class)
 							.map(similar -> {
 								ProductSummary summary = ProductMapper.toProductSummary(similar);
@@ -212,9 +179,6 @@ public class ProductSearchService {
 				.defaultIfEmpty(Collections.emptyList());
 	}
 
-	/**
-	 * Wyszukiwanie produktów z określonego przedziału cenowego
-	 */
 	public Mono<Page<ProductSummary>> findProductsByPriceRange(
 			BigDecimal minPrice,
 			BigDecimal maxPrice,
@@ -252,9 +216,6 @@ public class ProductSearchService {
 				);
 	}
 
-	/**
-	 * Wyszukiwanie produktów na wyprzedaży (z przecenami)
-	 */
 	public Mono<Page<ProductSummary>> findProductsOnSale(
 			Integer minDiscountPercentage,
 			Pageable pageable,
@@ -267,7 +228,6 @@ public class ProductSearchService {
 				.and("price.discounted").ne(null);
 
 		if (minDiscountPercentage != null && minDiscountPercentage > 0) {
-			// Dodajemy filtr na minimalną wartość procentową rabatu
 			criteria = criteria.and("price.discountPercentage").gte(minDiscountPercentage);
 		}
 
@@ -289,9 +249,6 @@ public class ProductSearchService {
 				);
 	}
 
-	/**
-	 * Wyszukiwanie produktów z konkretnymi atrybutami
-	 */
 	public Mono<Page<ProductSummary>> findProductsByAttributes(
 			Map<String, String> attributeFilters,
 			Pageable pageable,
@@ -303,7 +260,6 @@ public class ProductSearchService {
 		List<Criteria> criteriaList = new ArrayList<>();
 		criteriaList.add(Criteria.where("status").is("ACTIVE"));
 
-		// Dodajemy filtr dla każdego atrybutu
 		attributeFilters.forEach((attrName, attrValue) ->
 				criteriaList.add(Criteria.where("attributes").elemMatch(
 						Criteria.where("name").is(attrName).and("value").is(attrValue)
@@ -332,9 +288,6 @@ public class ProductSearchService {
 				);
 	}
 
-	/**
-	 * Znajdowanie najnowszych produktów w systemie
-	 */
 	public Mono<List<ProductSummary>> findLatestProducts(
 			int limit,
 			TracingContext tracingContext) {
@@ -356,10 +309,6 @@ public class ProductSearchService {
 				.collectList();
 	}
 
-	/**
-	 * Znajdowanie najpopularniejszych produktów
-	 * (implementacja bazowa - do rozbudowy np. o dane z systemu analitycznego)
-	 */
 	public Mono<List<ProductSummary>> findPopularProducts(
 			int limit,
 			TracingContext tracingContext) {
@@ -367,9 +316,7 @@ public class ProductSearchService {
 		log.debug("Finding popular products, traceId: {}",
 				tracingContext != null ? tracingContext.getTraceId() : "unknown");
 
-		// W prostej implementacji zwracamy wyróżnione produkty
-		// W rzeczywistym systemie można zintegrować to z danymi o sprzedaży,
-		// oglądaniach, recenzjach itp.
+		//todo to integrate with sales data
 
 		Query query = new Query(Criteria.where("status").is("ACTIVE")
 				.and("featured").is(true))

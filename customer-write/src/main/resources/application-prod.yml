@@ -1,0 +1,99 @@
+# Production environment configuration
+spring:
+  profiles:
+    active: prod
+
+  # JDBC configuration for event store
+  datasource:
+    url: jdbc:postgresql://customer-db-prod:5432/customer_event_store
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
+    hikari:
+      maximum-pool-size: 20
+      minimum-idle: 10
+      idle-timeout: 300000
+
+  # Kafka configuration for production
+  kafka:
+    bootstrap-servers: ${KAFKA_BROKERS}
+    schema-registry-url: ${SCHEMA_REGISTRY_URL}
+    producer:
+      retries: 5
+      properties:
+        # Production specific SSL configuration
+        security.protocol: SSL
+        ssl.truststore.location: ${KAFKA_TRUSTSTORE_LOCATION}
+        ssl.truststore.password: ${KAFKA_TRUSTSTORE_PASSWORD}
+        ssl.keystore.location: ${KAFKA_KEYSTORE_LOCATION}
+        ssl.keystore.password: ${KAFKA_KEYSTORE_PASSWORD}
+        ssl.key.password: ${KAFKA_KEY_PASSWORD}
+
+# Server settings - secure for production
+server:
+  error:
+    include-message: never
+    include-binding-errors: never
+  ssl:
+    enabled: true
+    key-store: ${SSL_KEYSTORE_PATH}
+    key-store-password: ${SSL_KEYSTORE_PASSWORD}
+    key-store-type: PKCS12
+    key-alias: customer-write
+
+# Logging configuration - more restricted for production
+logging:
+  level:
+    root: WARN
+    pl.ecommerce: INFO
+    org.springframework.web: WARN
+    org.springframework.security: WARN
+    org.springframework.kafka: WARN
+  elasticsearch:
+    host: ${ELASTICSEARCH_HOST}
+    port: 9200
+  logstash:
+    enabled: true
+    host: ${LOGSTASH_HOST}
+    port: 5044
+
+# Actuator endpoints - restricted for production
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+      base-path: /management
+  endpoint:
+    health:
+      show-details: when_authorized
+  tracing:
+    sampling:
+      probability: 0.1
+  opentelemetry:
+    jaeger:
+      endpoint: ${JAEGER_ENDPOINT}
+  prometheus:
+    tags:
+      environment: prod
+
+# OpenAPI documentation - disabled for production
+springdoc:
+  api-docs:
+    enabled: false
+  swagger-ui:
+    enabled: false
+
+# Event listener configuration
+event:
+  listener:
+    group-id: ${spring.application.name}-group-prod
+
+# Alerting configuration - real endpoints for production
+alerts:
+  enabled: true
+  slack-webhook-url: ${SLACK_WEBHOOK_URL}
+
+# Kafka DLQ configuration - more retries for production
+kafka:
+  dlq:
+    retry-attempts: 5

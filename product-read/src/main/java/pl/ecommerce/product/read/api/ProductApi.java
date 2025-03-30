@@ -86,7 +86,7 @@ public interface ProductApi {
 
 	@Operation(summary = "Get related products", description = "Returns products related to a specific product")
 	@GetMapping("/{id}/related")
-	Mono<ResponseEntity<Flux<ProductSummary>>> getRelatedProducts(
+	Flux<ResponseEntity<ProductSummary>> getRelatedProducts(
 			@PathVariable UUID id,
 			@RequestParam(defaultValue = "5") int limit,
 			ServerWebExchange exchange);

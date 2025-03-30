@@ -9,6 +9,7 @@ import org.springframework.data.mongodb.core.index.Indexed;
 import org.springframework.data.mongodb.core.mapping.Document;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.Instant;
 import java.util.*;
 
@@ -94,8 +95,10 @@ public class ProductReadModel {
 			if (!hasDiscount() || regular.compareTo(BigDecimal.ZERO) <= 0) {
 				return 0;
 			}
-			return regular.subtract(discounted).multiply(new BigDecimal(100)).divide(regular, 0, BigDecimal.ROUND_HALF_UP).intValue();
-		}
+			return regular.subtract(discounted)
+					.multiply(BigDecimal.valueOf(100))
+					.divide(regular, 0, RoundingMode.HALF_UP)
+					.intValue();		}
 	}
 
 	@Data
@@ -112,7 +115,7 @@ public class ProductReadModel {
 		}
 
 		public boolean isLowStock() {
-			return available > 0 && available <= 5; // Example threshold
+			return available > 0 && available <= 5;
 		}
 	}
 

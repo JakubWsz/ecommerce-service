@@ -1,0 +1,105 @@
+# Test environment configuration
+spring:
+  profiles:
+    active: test
+
+  # JDBC configuration for PostgreSQL with TestContainers
+  datasource:
+    url: jdbc:postgresql://localhost:5432/customer_event_store
+    hikari:
+      connection-timeout: 5000
+      maximum-pool-size: 5
+      minimum-idle: 1
+      idle-timeout: 60000
+
+  # Flyway extra config for tests
+  flyway:
+    locations: classpath:db/migration,classpath:db/testdata
+
+  # Kafka configuration for tests
+  kafka:
+    bootstrap-servers: ${spring.embedded.kafka.brokers:localhost:29092}
+    producer:
+      retries: 1
+      properties:
+        delivery.timeout.ms: 5000
+        request.timeout.ms: 3000
+        retry.backoff.ms: 100
+
+  # Enable embedded Kafka for tests
+  embedded:
+    kafka:
+      enabled: true
+      topics:
+        - customer.registered.event
+        - customer.updated.event
+        - customer.email-changed.event
+        - customer.email-verified.event
+        - customer.phone-verified.event
+        - customer.address-added.event
+        - customer.address-updated.event
+        - customer.address-removed.event
+        - customer.preferences-updated.event
+        - customer.deactivated.event
+        - customer.reactivated.event
+        - customer.deleted.event
+        - customer.registered.event.DLT
+        - customer.updated.event.DLT
+        - customer.email-changed.event.DLT
+        - customer.email-verified.event.DLT
+        - customer.phone-verified.event.DLT
+
+# Server settings - random port for tests
+server:
+  port: 0
+
+# Logging configuration - minimal for tests
+logging:
+  level:
+    root: WARN
+    pl.ecommerce: DEBUG
+    org.springframework.test: INFO
+    org.springframework.kafka.test: INFO
+    org.testcontainers: INFO
+  elasticsearch:
+    enabled: false
+
+# Actuator endpoints - minimal for tests
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  tracing:
+    enabled: false
+  prometheus:
+    metrics:
+      export:
+        enabled: false
+
+# OpenAPI documentation - disabled for tests
+springdoc:
+  api-docs:
+    enabled: false
+  swagger-ui:
+    enabled: false
+
+# Event listener configuration
+event:
+  listener:
+    group-id: ${spring.application.name}-group-test
+
+# Alerting configuration - disabled for tests
+alerts:
+  enabled: false
+  critical-email-recipients: test@example.com
+  slack-webhook-url: http://dummy-webhook
+
+# Kafka DLQ configuration - minimal for tests
+kafka:
+  dlq:
+    retry-attempts: 1
+    initial-interval-ms: 100
+    multiplier: 1.0
+    max-interval-ms: 1000
+    retry-interval-ms: 500

@@ -22,13 +22,13 @@ public class ProductEventProjectorHelper {
 		PriceInfo price = new PriceInfo(
 				event.getPrice(),
 				event.getDiscountedPrice(),
-				"USD" // Default currency
+				"USD"
 		);
 
 		StockInfo stock = new StockInfo(
 				event.getInitialStock(),
-				0, // No reservations initially
-				"DEFAULT" // Default warehouse
+				0,
+				"DEFAULT"
 		);
 
 		return ProductReadModel.builder()
@@ -67,7 +67,7 @@ public class ProductEventProjectorHelper {
 				.set("lastOperation", "UpdateProduct")
 				.set("lastUpdatedAt", Instant.now());
 
-		event.getChanges().forEach((key, value) -> {
+		event.getChangedFields().forEach((key, value) -> {
 			switch (key) {
 				case "name":
 					update.set("name", value);
@@ -80,10 +80,10 @@ public class ProductEventProjectorHelper {
 					break;
 				case "attributes":
 					update.set("attributes", ((java.util.Collection<?>) value).stream()
-							.filter(a -> a instanceof pl.ecommerce.product.write.domain.valueobjects.ProductAttribute)
+							.filter(a -> a instanceof ProductAttribute)
 							.map(a -> {
-								pl.ecommerce.product.write.domain.valueobjects.ProductAttribute attr =
-										(pl.ecommerce.product.write.domain.valueobjects.ProductAttribute) a;
+							ProductAttribute attr =
+										(ProductAttribute) a;
 								return new ProductAttribute(attr.getName(), attr.getValue(), attr.getUnit());
 							})
 							.collect(Collectors.toList()));

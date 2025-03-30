@@ -7,15 +7,9 @@ spring:
 
   # JDBC configuration for event store
   datasource:
-    url: jdbc:postgresql://localhost:5432/customer_event_store
-    username: customer_user
-    password: customer_password
     driver-class-name: org.postgresql.Driver
     hikari:
       connection-timeout: 20000
-      maximum-pool-size: 10
-      minimum-idle: 5
-      idle-timeout: 300000
       pool-name: CustomerWriteHikariPool
 
   # Flyway migration
@@ -29,9 +23,6 @@ spring:
     bootstrap-servers: localhost:29092
     schema-registry-url: http://localhost:8081
     producer:
-#      key-serializer: org.apache.kafka.common.serialization.StringSerializer
-#      value-serializer: org.apache.kafka.common.serialization.JsonSerializer
-      acks: all
       retries: 3
       properties:
         delivery.timeout.ms: 120000
@@ -40,97 +31,94 @@ spring:
 
 # Server settings
 server:
-  port: ${SERVER_PORT:8080}
-  shutdown: graceful
-  http2:
-    enabled: true
-
-# Monitoring and actuator configuration
-management:
-  endpoints:
-    web:
-      exposure:
-        include: health,info,prometheus,metrics,loggers,env,beans
-  endpoint:
-    health:
-      show-details: always
-  metrics:
-    distribution:
-      percentiles-histogram:
-        http.server.requests: true
-      percentiles:
-        http.server.requests: 0.5, 0.9, 0.95, 0.99
-    tags:
-      application: ${spring.application.name}
-  tracing:
-    enabled: true
-    sampling:
-      probability: 1.0
+  port: 8080
+  error:
+    include-message: always
+    include-binding-errors: always
 
 # Logging configuration
 logging:
   level:
     root: INFO
-    pl.ecommerce: INFO
-    pl.ecommerce.customer.write: DEBUG
-    org.springframework.jdbc: INFO
+    pl.ecommerce: DEBUG
+    org.springframework.web: INFO
+    org.springframework.security: INFO
     org.springframework.kafka: INFO
-    org.springframework.web.reactive: INFO
+  elasticsearch:
+    host: localhost
+    port: 9200
 
-# Enable Swagger UI
+# Actuator endpoints
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus,metrics,env
+  endpoint:
+    health:
+      show-details: always
+      probes:
+        enabled: true
+      group:
+        liveness:
+          include: livenessState
+        readiness:
+          include: readinessState,db,kafka
+  tracing:
+    sampling:
+      probability: 1.0
+  prometheus:
+    metrics:
+      export:
+        enabled: true
+    tags:
+      application: ${spring.application.name}
+      environment: ${spring.profiles.active:default}
+
+# OpenAPI documentation
 springdoc:
+  api-docs:
+    path: /api-docs
   swagger-ui:
     path: /swagger-ui.html
+  packages-to-scan: pl.ecommerce.customer.write.api
+
+# Event listener configuration
+event:
+  listener:
+    group-id: ${spring.application.name}-group
+    topics:
+      - customer.registered.event
+      - customer.updated.event
+      - customer.email-changed.event
+      - customer.email-verified.event
+      - customer.phone-verified.event
+      - customer.address-added.event
+      - customer.address-updated.event
+      - customer.address-removed.event
+      - customer.preferences-updated.event
+      - customer.deactivated.event
+      - customer.reactivated.event
+      - customer.deleted.event
+
+# Alerting configuration
+alerts:
+  enabled: true
+  evaluation-interval: 15s
+  critical-email-recipients: operations@example.com,oncall@example.com
+  slack-webhook-url: ${SLACK_WEBHOOK_URL:}
+
+# Kafka DLQ configuration
+kafka:
+  dlq:
     enabled: true
-  api-docs:
-    enabled: true
+    retry-attempts: 3
+    initial-interval-ms: 1000
+    multiplier: 2.0
+    max-interval-ms: 60000
+    retry-interval-ms: 60000
+    topics: customer.registered.event.DLT,customer.updated.event.DLT,customer.email-changed.event.DLT,customer.email-verified.event.DLT,customer.phone-verified.event.DLT,customer.address-added.event.DLT,customer.address-updated.event.DLT,customer.address-removed.event.DLT,customer.preferences-updated.event.DLT,customer.deactivated.event.DLT,customer.reactivated.event.DLT,customer.deleted.event.DLT
 
----
-# Profile: dev
-spring:
-  config:
-    activate:
-      on-profile: dev
-
-  datasource:
-    url: jdbc:postgresql://localhost:5432/customer
-    username: postgres
-    password: postgres
-
-# Logging configuration for dev
-logging:
-  level:
-    pl.ecommerce.customer.write: DEBUG
-    org.springframework.jdbc: DEBUG
-
-server:
-  port: 8081
----
-# Profile: prod
-spring:
-  config:
-    activate:
-      on-profile: prod
-
-  # Database configuration for production
-  datasource:
-    url: jdbc:postgresql://${DB_HOST:postgres}:${DB_PORT:5432}/${DB_NAME:customer_event_store}
-    username: ${DB_USER:customer_user}
-    password: ${DB_PASSWORD:customer_password}
-
-  # Kafka configuration for production
-  kafka:
-    bootstrap-servers: ${KAFKA_SERVERS:kafka:9092}
-
-# Logging configuration for production
-logging:
-  level:
-    root: WARN
-    pl.ecommerce.customer.write: INFO
-
-# Disable Swagger UI for production
-springdoc:
-  swagger-ui:
-    enabled: false
-  api-docs:
-    enabled: false
+opentelemetry:
+  otlp:
+    endpoint: http://otel-collector:4317

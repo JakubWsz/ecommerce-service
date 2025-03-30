@@ -1,0 +1,60 @@
+# Development environment configuration
+spring:
+  profiles:
+    active: dev
+
+  # JDBC configuration for event store
+  datasource:
+    url: jdbc:postgresql://localhost:5432/customer_event_store
+    username: customer_user
+    password: customer_password
+    hikari:
+      maximum-pool-size: 5
+      minimum-idle: 2
+      idle-timeout: 300000
+
+# Logging configuration - extended for development
+logging:
+  level:
+    org.springframework.web: DEBUG
+    org.springframework.security: DEBUG
+    org.springframework.kafka: DEBUG
+    org.hibernate.SQL: DEBUG
+    org.hibernate.type.descriptor.sql.BasicBinder: TRACE
+
+# Server settings - verbose errors for development
+server:
+  error:
+    include-stacktrace: always
+
+# Actuator endpoints - all for development
+management:
+  endpoints:
+    web:
+      exposure:
+        include: '*'
+
+# OpenAPI documentation - extended options for development
+springdoc:
+  swagger-ui:
+    operationsSorter: method
+    tagsSorter: alpha
+    displayRequestDuration: true
+  show-actuator: true
+
+# Event listener configuration
+event:
+  listener:
+    group-id: ${spring.application.name}-group-dev
+
+# Alerting configuration - disabled for development
+alerts:
+  enabled: false
+  critical-email-recipients: dev@example.com
+
+# Kafka DLQ configuration - shorter intervals for development
+kafka:
+  dlq:
+    retry-attempts: 3
+    max-interval-ms: 10000
+    retry-interval-ms: 5000

@@ -12,6 +12,7 @@ import pl.ecommerce.product.read.infrastructure.repository.ProductReadRepository
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
@@ -24,18 +25,13 @@ public class StockVerificationService {
 
 	private final ProductReadRepository productRepository;
 
-	/**
-	 * Weryfikuje dostępność produktów dla zamówienia
-	 */
 	public Mono<StockVerificationResponse> verifyStock(StockVerificationRequest request, TracingContext tracingContext) {
 		String traceId = tracingContext != null ? tracingContext.getTraceId() : "unknown";
 		log.debug("Verifying stock for {} items, traceId: {}",
 				request.getItems().size(), traceId);
 
-		// Lista pozycji o niewystarczającym stanie magazynowym
 		List<StockVerificationItem> insufficientItems = new ArrayList<>();
 
-		// Pobieramy i weryfikujemy każdy produkt
 		return Flux.fromIterable(request.getItems())
 				.flatMap(item -> {
 					UUID productId = item.getProductId();
@@ -47,7 +43,6 @@ public class StockVerificationService {
 								boolean isAvailable = availableQuantity >= requestedQuantity;
 
 								if (!isAvailable) {
-									// Dodaj do listy niedostępnych
 									StockVerificationItem insufficientItem =
 											new StockVerificationItem(productId, requestedQuantity, availableQuantity);
 									insufficientItems.add(insufficientItem);
@@ -55,7 +50,7 @@ public class StockVerificationService {
 
 								return isAvailable;
 							})
-							.defaultIfEmpty(false) // Produkt nie istnieje
+							.defaultIfEmpty(false)
 							.doOnNext(isAvailable -> {
 								if (!isAvailable) {
 									log.debug("Product unavailable or insufficient stock: {}, requested: {}, traceId: {}",
@@ -75,9 +70,6 @@ public class StockVerificationService {
 				});
 	}
 
-	/**
-	 * Sprawdza czy pojedynczy produkt jest dostępny w żądanej ilości
-	 */
 	public Mono<Boolean> isProductAvailable(UUID productId, int quantity, TracingContext tracingContext) {
 		String traceId = tracingContext != null ? tracingContext.getTraceId() : "unknown";
 		log.debug("Checking availability of product: {}, quantity: {}, traceId: {}",
@@ -93,19 +85,78 @@ public class StockVerificationService {
 
 					return isAvailable;
 				})
-				.defaultIfEmpty(false); // Produkt nie istnieje
+				.defaultIfEmpty(false);
 	}
 
-	/**
-	 * Oblicza faktycznie dostępną ilość produktu
-	 * (ilość w magazynie minus rezerwacje)
-	 */
+	public Mono<Boolean> reserveProductStock(UUID productId, int quantity, String reservationId, TracingContext tracingContext) {
+		String traceId = tracingContext != null ? tracingContext.getTraceId() : "unknown";
+		String spanId = tracingContext != null ? tracingContext.getSpanId() : null;
+
+		log.debug("Reserving stock for product: {}, quantity: {}, reservationId: {}, traceId: {}",
+				productId, quantity, reservationId, traceId);
+
+		return isProductAvailable(productId, quantity, tracingContext)
+				.flatMap(isAvailable -> {
+					if (!isAvailable) {
+						log.debug("Cannot reserve - product unavailable or insufficient stock: {}, quantity: {}, traceId: {}",
+								productId, quantity, traceId);
+						return Mono.just(false);
+					}
+
+					return productRepository.findById(productId)
+							.flatMap(product -> {
+								ProductReadModel.StockInfo stock = product.getStock();
+								if (stock == null) {
+									stock = new ProductReadModel.StockInfo(0, 0, "DEFAULT");
+									product.setStock(stock);
+								}
+
+								stock.setReserved(stock.getReserved() + quantity);
+
+								product.setLastTraceId(traceId);
+								product.setLastSpanId(spanId);
+								product.setLastOperation("ReserveStock:" + reservationId);
+								product.setLastUpdatedAt(Instant.now());
+
+								return productRepository.save(product)
+										.thenReturn(true);
+							});
+				});
+	}
+
+	public Mono<Boolean> releaseReservation(UUID productId, String reservationId, TracingContext tracingContext) {
+		String traceId = tracingContext != null ? tracingContext.getTraceId() : "unknown";
+		String spanId = tracingContext != null ? tracingContext.getSpanId() : null;
+
+		log.debug("Releasing reservation for product: {}, reservationId: {}, traceId: {}",
+				productId, reservationId, traceId);
+
+		return productRepository.findById(productId)
+				.flatMap(product -> {
+					ProductReadModel.StockInfo stock = product.getStock();
+					if (stock == null) {
+						log.debug("Cannot release reservation - product has no stock info: {}, traceId: {}",
+								productId, traceId);
+						return Mono.just(false);
+					}
+
+					stock.setReserved(0);
+
+					product.setLastTraceId(traceId);
+					product.setLastSpanId(spanId);
+					product.setLastOperation("ReleaseReservation:" + reservationId);
+					product.setLastUpdatedAt(Instant.now());
+
+					return productRepository.save(product)
+							.thenReturn(true);
+				})
+				.defaultIfEmpty(false);
+	}
+
 	private int calculateAvailableQuantity(ProductReadModel product) {
 		if (Objects.isNull(product) || Objects.isNull(product.getStock())) {
 			return 0;
 		}
-
 		return Math.max(0, product.getStock().getAvailable() - product.getStock().getReserved());
 	}
 }
-

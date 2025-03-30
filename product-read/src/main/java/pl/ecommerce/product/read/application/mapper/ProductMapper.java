@@ -1,11 +1,17 @@
 package pl.ecommerce.product.read.application.mapper;
 
+import lombok.experimental.UtilityClass;
 import pl.ecommerce.product.read.api.dto.*;
 import pl.ecommerce.product.read.domain.model.ProductReadModel;
 
 import java.util.Collections;
+import java.util.List;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
+import static java.util.Objects.nonNull;
+
+@UtilityClass
 public class ProductMapper {
 
 	public static ProductResponse toProductResponse(ProductReadModel product) {
@@ -21,35 +27,9 @@ public class ProductMapper {
 				.regularPrice(product.getPrice().getRegular())
 				.discountedPrice(product.getPrice().getDiscounted())
 				.currency(product.getPrice().getCurrency())
-				.attributes(product.getAttributes() == null ? Collections.emptyList() :
-						product.getAttributes().stream()
-								.map(attr -> new ProductAttributeDto(
-										attr.getName(), attr.getValue(), attr.getUnit()))
-								.collect(Collectors.toList()))
-				.variants(product.getVariants() == null ? Collections.emptyList() :
-						product.getVariants().stream()
-								.map(variant -> ProductVariantDto.builder()
-										.id(variant.getId())
-										.sku(variant.getSku())
-										.attributes(variant.getAttributes().stream()
-												.map(attr -> new ProductAttributeDto(
-														attr.getName(), attr.getValue(), attr.getUnit()))
-												.collect(Collectors.toList()))
-										.regularPrice(variant.getPrice().getRegular())
-										.discountedPrice(variant.getPrice().getDiscounted())
-										.currency(variant.getPrice().getCurrency())
-										.stock(new StockInfoDto(
-												variant.getStock().getAvailable(),
-												variant.getStock().getReserved(),
-												variant.getStock().isInStock(),
-												variant.getStock().isLowStock()))
-										.build())
-								.collect(Collectors.toList()))
-				.stock(new StockInfoDto(
-						product.getStock().getAvailable(),
-						product.getStock().getReserved(),
-						product.getStock().isInStock(),
-						product.getStock().isLowStock()))
+				.attributes(mapAttributes(product.getAttributes()))
+				.variants(mapVariants(product.getVariants()))
+				.stock(mapStockInfo(product.getStock()))
 				.status(product.getStatus())
 				.images(product.getImages())
 				.brandName(product.getBrandName())
@@ -73,10 +53,45 @@ public class ProductMapper {
 				.hasDiscount(product.getPrice().hasDiscount())
 				.discountPercentage(product.getPrice().getDiscountPercentage())
 				.inStock(product.getStock().isInStock())
-				.mainImage(product.getImages() != null && !product.getImages().isEmpty() ?
-						product.getImages().get(0) : null)
+				.mainImage(getFirstImage(product.getImages()))
 				.brandName(product.getBrandName())
-				.hasVariants(!product.getVariants().isEmpty())
+				.hasVariants(nonNull(product.getVariants()) && !product.getVariants().isEmpty())
 				.build();
+	}
+
+	private static List<ProductAttributeDto> mapAttributes(List<ProductReadModel.ProductAttribute> attributes) {
+		return Optional.ofNullable(attributes)
+				.orElse(Collections.emptyList())
+				.stream()
+				.map(attr -> new ProductAttributeDto(attr.getName(), attr.getValue(), attr.getUnit()))
+				.collect(Collectors.toList());
+	}
+
+	private static List<ProductVariantDto> mapVariants(List<ProductReadModel.ProductVariant> variants) {
+		return Optional.ofNullable(variants)
+				.orElse(Collections.emptyList())
+				.stream()
+				.map(variant -> ProductVariantDto.builder()
+						.id(variant.getId())
+						.sku(variant.getSku())
+						.attributes(mapAttributes(variant.getAttributes()))
+						.regularPrice(variant.getPrice().getRegular())
+						.discountedPrice(variant.getPrice().getDiscounted())
+						.currency(variant.getPrice().getCurrency())
+						.stock(mapStockInfo(variant.getStock()))
+						.build())
+				.collect(Collectors.toList());
+	}
+
+	private static StockInfoDto mapStockInfo(ProductReadModel.StockInfo stock) {
+		return new StockInfoDto(
+				stock.getAvailable(),
+				stock.getReserved(),
+				stock.isInStock(),
+				stock.isLowStock());
+	}
+
+	private static String getFirstImage(List<String> images) {
+		return (nonNull(images) && !images.isEmpty()) ? images.getFirst() : null;
 	}
 }

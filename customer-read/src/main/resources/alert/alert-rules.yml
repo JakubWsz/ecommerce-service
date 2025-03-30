@@ -1,0 +1,86 @@
+groups:
+  - name: customer-read-alerts
+    rules:
+      - alert: CustomerReadServiceDown
+        expr: up{job="customer-read"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          service: customer-read
+        annotations:
+          summary: "Customer Read Service is down"
+          description: "The customer-read service instance {{ $labels.instance }} has been down for more than 1 minute."
+
+      - alert: HighErrorRate
+        expr: sum(increase(http_server_requests_seconds_count{status=~"5..", service="customer-read"}[5m])) / sum(increase(http_server_requests_seconds_count{service="customer-read"}[5m])) > 0.05
+        for: 2m
+        labels:
+          severity: warning
+          service: customer-read
+        annotations:
+          summary: "High error rate detected in customer-read service"
+          description: "More than 5% of requests are failing with 5xx errors in the past 5 minutes."
+
+      # Performance alerts
+      - alert: SlowResponseTime
+        expr: histogram_quantile(0.95, sum(rate(http_server_requests_seconds_bucket{service="customer-read"}[5m])) by (le, instance)) > 0.5
+        for: 5m
+        labels:
+          severity: warning
+          service: customer-read
+        annotations:
+          summary: "Slow response time detected"
+          description: "95th percentile of response time is above 500ms for more than 5 minutes on instance {{ $labels.instance }}."
+
+      # MongoDB alerts
+      - alert: MongoDBHighLatency
+        expr: histogram_quantile(0.95, sum(rate(mongodb_driver_command_execution_time_milliseconds_bucket{service="customer-read"}[5m])) by (le, cluster)) > 100
+        for: 5m
+        labels:
+          severity: warning
+          service: customer-read
+        annotations:
+          summary: "High MongoDB query latency"
+          description: "95th percentile of MongoDB query time is above 100ms for more than 5 minutes on cluster {{ $labels.cluster }}."
+
+      # Kafka and event processing alerts
+      - alert: KafkaConsumerLag
+        expr: sum(kafka_consumer_consumer_fetch_manager_metrics_records_lag{client_id=~"customer-read.*"}) by (client_id) > 1000
+        for: 5m
+        labels:
+          severity: warning
+          service: customer-read
+        annotations:
+          summary: "Kafka consumer lag is high"
+          description: "The customer-read service is falling behind in consuming messages from Kafka."
+
+      - alert: DeadLetterQueueGrowing
+        expr: increase(customer_read_dlq_messages_total[10m]) > 10
+        for: 5m
+        labels:
+          severity: warning
+          service: customer-read
+        annotations:
+          summary: "Dead letter queue is growing"
+          description: "More than 10 messages have been sent to the dead letter queue in the last 10 minutes."
+
+      # Health check alerts
+      - alert: HighMemoryUsage
+        expr: sum(jvm_memory_used_bytes{service="customer-read"}) / sum(jvm_memory_max_bytes{service="customer-read"}) > 0.85
+        for: 5m
+        labels:
+          severity: warning
+          service: customer-read
+        annotations:
+          summary: "High memory usage"
+          description: "JVM memory usage is above 85% for more than 5 minutes."
+
+      - alert: HighCPUUsage
+        expr: process_cpu_usage{service="customer-read"} > 0.8
+        for: 5m
+        labels:
+          severity: warning
+          service: customer-read
+        annotations:
+          summary: "High CPU usage"
+          description: "CPU usage is above 80% for more than 5 minutes on instance {{ $labels.instance }}."

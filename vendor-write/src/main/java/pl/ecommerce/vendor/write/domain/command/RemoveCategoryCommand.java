@@ -12,4 +12,8 @@ public record RemoveCategoryCommand(
 		UUID categoryId,
 		TracingContext tracingContext
 ) implements Command {
+	@Override
+	public UUID getId() {
+		return vendorId;
+	}
 }

@@ -11,10 +11,11 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.kafka.config.ConcurrentKafkaListenerContainerFactory;
 import org.springframework.kafka.core.ConsumerFactory;
 import org.springframework.kafka.core.DefaultKafkaConsumerFactory;
-import org.springframework.kafka.listener.DefaultErrorHandler;
+import org.springframework.kafka.core.KafkaTemplate;
+import org.springframework.kafka.listener.CommonErrorHandler;
 import org.springframework.kafka.support.serializer.ErrorHandlingDeserializer;
 import org.springframework.kafka.support.serializer.JsonDeserializer;
-import org.springframework.util.backoff.FixedBackOff;
+import pl.ecommerce.commons.kafka.dlq.DlqMetrics;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -25,9 +26,23 @@ import java.util.Map;
 public class KafkaErrorHandlingConfig {
 
 	private final KafkaProperties kafkaProperties;
+	private final KafkaTemplate<String, String> kafkaTemplate;
+	private final DlqMetrics dlqMetrics;
 
 	@Value("${spring.kafka.listener.concurrency:1}")
 	private int concurrency;
+
+	@Value("${kafka.dlq.retry-attempts:3}")
+	private int retryAttempts;
+
+	@Value("${kafka.dlq.initial-interval-ms:1000}")
+	private long initialIntervalMs;
+
+	@Value("${kafka.dlq.multiplier:2.0}")
+	private double multiplier;
+
+	@Value("${kafka.dlq.max-interval-ms:60000}")
+	private long maxIntervalMs;
 
 	@Bean
 	public ConsumerFactory<Object, Object> errorHandlingConsumerFactory() {
@@ -52,15 +67,20 @@ public class KafkaErrorHandlingConfig {
 		ConcurrentKafkaListenerContainerFactory<Object, Object> factory = new ConcurrentKafkaListenerContainerFactory<>();
 		factory.setConsumerFactory(errorHandlingConsumerFactory());
 		factory.setConcurrency(concurrency);
-
-		DefaultErrorHandler errorHandler = new DefaultErrorHandler(
-				new FixedBackOff(5000L, 3L)
-		);
-
-		factory.setCommonErrorHandler(errorHandler);
-
+		factory.setCommonErrorHandler(createDeadLetterErrorHandler());
 		factory.setRecordMessageConverter(new org.springframework.kafka.support.converter.JsonMessageConverter());
-
 		return factory;
+	}
+
+	private CommonErrorHandler createDeadLetterErrorHandler() {
+		return ErrorHandlerUtils.createDeadLetterErrorHandler(
+				kafkaTemplate,
+				retryAttempts,
+				initialIntervalMs,
+				multiplier,
+				maxIntervalMs,
+				dlqMetrics,
+				null
+		);
 	}
 }

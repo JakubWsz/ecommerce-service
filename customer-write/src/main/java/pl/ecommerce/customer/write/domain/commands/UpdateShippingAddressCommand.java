@@ -2,7 +2,6 @@ package pl.ecommerce.customer.write.domain.commands;
 
 import lombok.Builder;
 import pl.ecommerce.commons.command.Command;
-import pl.ecommerce.commons.tracing.TracingContext;
 
 import java.util.UUID;
 
@@ -15,7 +14,10 @@ public record UpdateShippingAddressCommand(UUID customerId,
 										   String city,
 										   String postalCode,
 										   String country,
-										   String state,
-										   boolean isDefault,
-										   TracingContext tracingContext) implements Command {
+										   String voivodeship,
+										   boolean isDefault) implements Command {
+	@Override
+	public UUID getId() {
+		return customerId;
+	}
 }

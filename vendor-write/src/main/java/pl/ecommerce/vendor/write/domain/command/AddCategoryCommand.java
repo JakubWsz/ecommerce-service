@@ -13,4 +13,8 @@ public record AddCategoryCommand(
 		String categoryName,
 		TracingContext tracingContext
 ) implements Command {
+	@Override
+	public UUID getId() {
+		return vendorId;
+	}
 }

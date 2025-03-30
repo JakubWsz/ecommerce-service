@@ -16,9 +16,11 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 import java.math.BigDecimal;
-import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.Supplier;
+
+import static java.util.Objects.nonNull;
 
 @Service
 @RequiredArgsConstructor
@@ -30,147 +32,156 @@ public class ProductQueryService {
 	private final ProductCacheService cacheService;
 
 	public Mono<ProductResponse> findById(UUID productId, TracingContext tracingContext) {
-		log.debug("Finding product by ID: {}, traceId: {}", productId, getTraceId(tracingContext));
-
-		return observe("product.findById",
-				// Najpierw sprawdź w cache'u
-				cacheService.getProductResponse(productId)
-						.switchIfEmpty(
-								// Jeśli nie ma w cache'u, pobierz z repozytorium
-								productRepository.findById(productId)
-										.flatMap(product -> {
-											// Zapisz model do cache'a
-											cacheService.cacheProduct(product).subscribe();
-
-											// Zbuduj odpowiedź
-											ProductResponse response = ProductMapper.toProductResponse(product);
-											response.setTraceId(getTraceId(tracingContext));
-
-											// Zapisz odpowiedź do cache'a
-											cacheService.cacheProductResponse(response).subscribe();
-
-											return Mono.just(response);
-										})
-						)
-						.doOnNext(response -> {
-							// Zawsze ustawiaj aktualny traceId
-							if (Objects.nonNull(response)) {
-								response.setTraceId(getTraceId(tracingContext));
-							}
-						})
+		return executeWithCache(
+				() -> cacheService.getProductResponse(productId),
+				() -> productRepository.findById(productId)
+						.flatMap(product -> cacheProductAndResponse(product, tracingContext)),
+				tracingContext,
+				"product.findById"
 		);
 	}
 
 	public Mono<ProductResponse> findBySku(String sku, TracingContext tracingContext) {
-		log.debug("Finding product by SKU: {}, traceId: {}", sku, getTraceId(tracingContext));
+		return executeWithCache(
+				() -> cacheService.getProductBySku(sku)
+						.flatMap(product -> cacheService.getProductResponse(product.getId())
+								.switchIfEmpty(Mono.defer(() -> cacheProductAndResponse(product, tracingContext)))),
 
-		return observe("product.findBySku",
-				// Spróbuj znaleźć produkt w cache'u przez SKU
-				cacheService.getProductBySku(sku)
-						.flatMap(product -> {
-							// Jeśli znaleziony w cache'u, użyj cached response lub zbuduj nową
-							return cacheService.getProductResponse(product.getId())
-									.switchIfEmpty(Mono.defer(() -> {
-										ProductResponse response = ProductMapper.toProductResponse(product);
-										response.setTraceId(getTraceId(tracingContext));
-										cacheService.cacheProductResponse(response).subscribe();
-										return Mono.just(response);
-									}));
-						})
-						.switchIfEmpty(
-								// Jeśli nie ma w cache'u, pobierz z repozytorium
-								productRepository.findBySku(sku)
-										.flatMap(product -> {
-											// Zapisz model i response do cache'a
-											cacheService.cacheProduct(product).subscribe();
+				() -> productRepository.findBySku(sku)
+						.flatMap(product -> cacheProductAndResponse(product, tracingContext)),
 
-											ProductResponse response = ProductMapper.toProductResponse(product);
-											response.setTraceId(getTraceId(tracingContext));
-
-											cacheService.cacheProductResponse(response).subscribe();
-
-											return Mono.just(response);
-										})
-						)
-						.doOnNext(response -> {
-							// Zawsze ustawiaj aktualny traceId
-							if (Objects.nonNull(response)) {
-								response.setTraceId(getTraceId(tracingContext));
-							}
-						})
+				tracingContext,
+				"product.findBySku"
 		);
 	}
 
 	public Mono<Page<ProductSummary>> searchProducts(String query, Pageable pageable, TracingContext tracingContext) {
-		log.debug("Searching products with query: {}, traceId: {}", query, getTraceId(tracingContext));
-
-		return observe("product.searchProducts",
-				productRepository.searchProducts(query, pageable, getTraceId(tracingContext)));
+		return executeWithCacheForPage(
+				() -> cacheService.getSearchResults(query, pageable),
+				() -> productRepository.searchProducts(query, pageable, getTraceId(tracingContext))
+						.flatMap(results -> cacheService.cacheSearchResults(query, pageable, results)
+								.thenReturn(results)),
+				tracingContext,
+				"product.searchProducts"
+		);
 	}
 
 	public Mono<Page<ProductSummary>> findByCategory(UUID categoryId, Pageable pageable, TracingContext tracingContext) {
-		log.debug("Finding products by category: {}, traceId: {}", categoryId, getTraceId(tracingContext));
-
-		return observe("product.findByCategory",
-				productRepository.findByCategory(categoryId, pageable, getTraceId(tracingContext)));
+		return executeWithCacheForPage(
+				() -> cacheService.getCategoryProducts(categoryId, pageable),
+				() -> productRepository.findByCategory(categoryId, pageable, getTraceId(tracingContext))
+						.flatMap(results -> cacheService.cacheCategoryProducts(categoryId, pageable, results)
+								.thenReturn(results)),
+				tracingContext,
+				"product.findByCategory"
+		);
 	}
 
 	public Mono<Page<ProductSummary>> findByVendor(UUID vendorId, Pageable pageable, TracingContext tracingContext) {
-		log.debug("Finding products by vendor: {}, traceId: {}", vendorId, getTraceId(tracingContext));
-
-		return observe("product.findByVendor",
-				productRepository.findByVendor(vendorId, pageable, getTraceId(tracingContext)));
+		return executeWithCacheForPage(
+				() -> cacheService.getVendorProducts(vendorId, pageable),
+				() -> productRepository.findByVendor(vendorId, pageable, getTraceId(tracingContext))
+						.flatMap(results -> cacheService.cacheVendorProducts(vendorId, pageable, results)
+								.thenReturn(results)),
+				tracingContext,
+				"product.findByVendor"
+		);
 	}
 
 	public Mono<Page<ProductSummary>> findFeaturedProducts(Pageable pageable, TracingContext tracingContext) {
-		log.debug("Finding featured products, traceId: {}", getTraceId(tracingContext));
-
-		return observe("product.findFeatured",
-				productRepository.findFeaturedProducts(pageable, getTraceId(tracingContext)));
+		return executeWithCacheForPage(
+				() -> cacheService.getFeaturedProducts(pageable),
+				() -> productRepository.findFeaturedProducts(pageable, getTraceId(tracingContext))
+						.flatMap(results -> cacheService.cacheFeaturedProducts(pageable, results)
+								.thenReturn(results)),
+				tracingContext,
+				"product.findFeatured"
+		);
 	}
 
-	public Mono<Page<ProductSummary>> filterProducts(
-			Set<UUID> categories,
-			Set<UUID> vendors,
-			UUID brandId,
-			BigDecimal minPrice,
-			BigDecimal maxPrice,
-			Boolean inStock,
-			Pageable pageable,
-			TracingContext tracingContext) {
-
-		log.debug("Filtering products, traceId: {}", getTraceId(tracingContext));
-
-		return observe("product.filterProducts",
-				productRepository.filterProducts(
-						categories,
-						vendors,
-						brandId,
-						minPrice,
-						maxPrice,
-						inStock,
-						pageable,
-						getTraceId(tracingContext)));
+	public Mono<Page<ProductSummary>> filterProducts(Set<UUID> categories, Set<UUID> vendors, UUID brandId, BigDecimal minPrice, BigDecimal maxPrice, Boolean inStock, Pageable pageable, TracingContext tracingContext) {
+		return executeWithCacheForPage(
+				() -> cacheService.getFilteredProducts(cacheKey),
+				() -> productRepository.filterProducts(categories, vendors, brandId, minPrice, maxPrice, inStock, pageable, getTraceId(tracingContext))
+						.flatMap(results -> cacheService.cacheFilteredProducts(cacheKey, results)
+								.thenReturn(results)),
+				tracingContext,
+				"product.filterProducts"
+		);
 	}
 
 	public Flux<ProductSummary> findRelatedProducts(UUID productId, int limit, TracingContext tracingContext) {
-		log.debug("Finding related products for product: {}, traceId: {}", productId, getTraceId(tracingContext));
-
-		return observe("product.findRelated",
-				productRepository.findRelatedProducts(productId, limit, getTraceId(tracingContext)));
+		return executeWithCacheForFlux(
+				() -> cacheService.getRelatedProducts(productId, limit),
+				() -> productRepository.findRelatedProducts(productId, limit, getTraceId(tracingContext))
+						.collectList()
+						.flatMap(results -> cacheService.cacheRelatedProducts(productId, limit, results)
+								.thenReturn(results))
+						.flatMapMany(Flux::fromIterable),
+				tracingContext,
+				"product.findRelated"
+		);
 	}
 
-	private <T> Mono<T> observe(String opName, Mono<T> mono) {
-		return Observation.createNotStarted(opName, observationRegistry)
-				.observe(() -> mono);
+	private Mono<ProductResponse> executeWithCache(
+			Supplier<Mono<ProductResponse>> cacheSupplier,
+			Supplier<Mono<ProductResponse>> dbSupplier,
+			TracingContext tracingContext,
+			String observationName) {
+
+		return observeMono(observationName,
+				cacheSupplier.get().switchIfEmpty(dbSupplier.get())
+						.doOnNext(response -> response.setTraceId(getTraceId(tracingContext))));
 	}
 
-	private <T> Flux<T> observe(String opName, Flux<T> flux) {
-		return Observation.createNotStarted(opName, observationRegistry)
-				.observe(() -> flux);
+	private Mono<Page<ProductSummary>> executeWithCacheForPage(
+			Supplier<Mono<Page<ProductSummary>>> cacheSupplier,
+			Supplier<Mono<Page<ProductSummary>>> dbSupplier,
+			TracingContext tracingContext,
+			String observationName) {
+
+		return observeMono(observationName, cacheSupplier.get()
+				.switchIfEmpty(dbSupplier.get())
+				.map(results -> applyTraceIdToPage(results, tracingContext)));
+	}
+
+	private Flux<ProductSummary> executeWithCacheForFlux(
+			Supplier<Flux<ProductSummary>> cacheSupplier,
+			Supplier<Flux<ProductSummary>> dbSupplier,
+			TracingContext tracingContext,
+			String observationName) {
+
+		return observeFlux(observationName, cacheSupplier.get()
+				.switchIfEmpty(dbSupplier.get())
+				.map(summary -> {
+					summary.setTraceId(getTraceId(tracingContext));
+					return summary;
+				}));
+	}
+
+	private Page<ProductSummary> applyTraceIdToPage(Page<ProductSummary> page, TracingContext tracingContext) {
+		page.forEach(summary -> summary.setTraceId(getTraceId(tracingContext)));
+		return page;
+	}
+
+	private Mono<ProductResponse> cacheProductAndResponse(pl.ecommerce.product.read.domain.model.ProductReadModel product, TracingContext tracingContext) {
+		ProductResponse response = ProductMapper.toProductResponse(product);
+		response.setTraceId(getTraceId(tracingContext));
+
+		return cacheService.cacheProduct(product)
+				.then(cacheService.cacheProductResponse(response))
+				.thenReturn(response);
+	}
+
+	private <T> Mono<T> observeMono(String opName, Mono<T> mono) {
+		return Observation.createNotStarted(opName, observationRegistry).observe(() -> mono);
+	}
+
+	private <T> Flux<T> observeFlux(String opName, Flux<T> flux) {
+		return Observation.createNotStarted(opName, observationRegistry).observe(() -> flux);
 	}
 
 	private String getTraceId(TracingContext tracingContext) {
-		return Objects.nonNull(tracingContext) ? tracingContext.getTraceId() : "unknown";
+		return nonNull(tracingContext) ? tracingContext.getTraceId() : "unknown";
 	}
 }

@@ -6,6 +6,7 @@ import org.springframework.data.mongodb.core.ReactiveMongoTemplate;
 import org.springframework.data.mongodb.core.query.Criteria;
 import org.springframework.data.mongodb.core.query.Query;
 import org.springframework.data.mongodb.core.query.Update;
+import org.springframework.stereotype.Repository;
 import pl.ecommerce.product.read.domain.model.CategoryReadModel;
 import reactor.core.publisher.Mono;
 
@@ -15,6 +16,7 @@ import java.util.UUID;
 
 @Slf4j
 @RequiredArgsConstructor
+@Repository
 public class CategoryReadRepositoryImpl implements CategoryReadRepositoryCustom {
 
 	private final ReactiveMongoTemplate mongoTemplate;
@@ -36,7 +38,6 @@ public class CategoryReadRepositoryImpl implements CategoryReadRepositoryCustom 
 		log.debug("Incrementing product count for category: {}, delta: {}, traceId: {}",
 				categoryId, delta, traceId);
 
-		Query query = Query.query(Criteria.where("_id").is(categoryId));
 		Update update = new Update()
 				.inc("productCount", delta)
 				.set("updatedAt", Instant.now())

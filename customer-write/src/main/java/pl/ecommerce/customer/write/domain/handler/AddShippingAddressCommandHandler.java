@@ -2,7 +2,6 @@ package pl.ecommerce.customer.write.domain.handler;
 
 import pl.ecommerce.commons.command.CommandHandler;
 import pl.ecommerce.commons.event.customer.CustomerAddressAddedEvent;
-import pl.ecommerce.commons.model.customer.AddressType;
 import pl.ecommerce.customer.write.domain.aggregate.CustomerAggregate;
 import pl.ecommerce.customer.write.domain.commands.AddShippingAddressCommand;
 
@@ -34,7 +33,7 @@ public class AddShippingAddressCommandHandler implements CommandHandler<AddShipp
 				command.city(),
 				command.postalCode(),
 				command.country(),
-				command.state(),
+				command.voivodeship(),
 				command.isDefault(),
 				Instant.now(),
 				aggregate.getVersion()

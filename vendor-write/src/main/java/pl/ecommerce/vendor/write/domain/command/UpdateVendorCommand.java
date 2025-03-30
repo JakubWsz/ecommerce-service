@@ -16,4 +16,8 @@ public record UpdateVendorCommand(
 		String contactPersonEmail,
 		TracingContext tracingContext
 ) implements Command {
+	@Override
+	public UUID getId() {
+		return vendorId;
+	}
 }

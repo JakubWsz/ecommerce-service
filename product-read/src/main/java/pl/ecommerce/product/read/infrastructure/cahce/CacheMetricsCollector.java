@@ -1,4 +1,4 @@
-package pl.ecommerce.product.read.infrastructure.monitoring;
+package pl.ecommerce.product.read.infrastructure.cahce;
 
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;

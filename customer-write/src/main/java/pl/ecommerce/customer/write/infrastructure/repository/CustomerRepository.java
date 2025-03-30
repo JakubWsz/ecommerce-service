@@ -5,9 +5,6 @@ import reactor.core.publisher.Mono;
 
 import java.util.UUID;
 
-/**
- * Repository interface for storing and retrieving customer aggregates
- */
 public interface CustomerRepository {
 
 	Mono<CustomerAggregate> save(CustomerAggregate customer);

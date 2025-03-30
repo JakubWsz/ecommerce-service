@@ -110,7 +110,7 @@ public class CustomerEventProjector extends DomainEventHandler {
 
 		customerRepository.findById(event.getAggregateId())
 				.flatMap(customer -> updateCustomerWithNewAddress(customer, newAddress, event, traceId))
-				.map(customerRepository::save)
+				.flatMap(customerRepository::save)
 				.doOnSuccess(updated -> log.debug("Updated customer with new address in read model: {}, traceId: {}",
 						event.getAggregateId(), traceId))
 				.doOnError(error -> log.error("Error updating customer with new address in read model: {}, traceId: {}",
@@ -126,7 +126,7 @@ public class CustomerEventProjector extends DomainEventHandler {
 
 		customerRepository.findById(event.getAggregateId())
 				.flatMap(customer -> updateCustomerAddress(customer, event, traceId))
-				.map(customerRepository::save)
+				.flatMap(customerRepository::save)
 				.doOnSuccess(updated -> log.debug("Updated address in customer read model: {}, traceId: {}",
 						event.getAggregateId(), traceId))
 				.doOnError(error -> log.error("Error updating address in customer read model: {}, traceId: {}",
@@ -142,7 +142,7 @@ public class CustomerEventProjector extends DomainEventHandler {
 
 		customerRepository.findById(event.getAggregateId())
 				.flatMap(customer -> removeAddressAndUpdateCustomer(customer, event, traceId))
-				.map(customerRepository::save)
+				.flatMap(customerRepository::save)
 				.doOnSuccess(updated -> log.debug("Removed address from customer read model: {}, traceId: {}",
 						event.getAggregateId(), traceId))
 				.doOnError(error -> log.error("Error removing address from customer read model: {}, traceId: {}",

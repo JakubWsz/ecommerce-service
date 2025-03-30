@@ -123,7 +123,7 @@ public interface CustomerEventProjectorHelper {
 				.city(event.getCity())
 				.postalCode(event.getPostalCode())
 				.country(event.getCountry())
-				.state(event.getState())
+				.voivodeship(event.getVoivodeship())
 				.isDefault(event.isDefault())
 				.addressType(AddressType.valueOf(event.getAddressType().name()))
 				.build();
@@ -169,7 +169,7 @@ public interface CustomerEventProjectorHelper {
 		address.setCity(event.getCity());
 		address.setPostalCode(event.getPostalCode());
 		address.setCountry(event.getCountry());
-		address.setState(event.getState());
+		address.setVoivodeship(event.getVoivodeship());
 	}
 
 	static void setDefaultForAddress(CustomerReadModel customer, Address targetAddress) {
@@ -182,7 +182,6 @@ public interface CustomerEventProjectorHelper {
 		});
 		targetAddress.setDefault(true);
 	}
-
 
 	static Mono<CustomerReadModel> removeAddressAndUpdateCustomer(CustomerReadModel customer, CustomerAddressRemovedEvent event, String traceId) {
 		if (nonNull(customer.getAddresses())) {

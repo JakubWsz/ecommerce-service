@@ -1,6 +1,5 @@
 package pl.ecommerce.product.read.infrastructure.repository;
 
-import com.mongodb.client.result.UpdateResult;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
@@ -10,6 +9,7 @@ import org.springframework.data.mongodb.core.ReactiveMongoTemplate;
 import org.springframework.data.mongodb.core.query.Criteria;
 import org.springframework.data.mongodb.core.query.Query;
 import org.springframework.data.mongodb.core.query.Update;
+import org.springframework.stereotype.Repository;
 import pl.ecommerce.product.read.api.dto.ProductSummary;
 import pl.ecommerce.product.read.application.mapper.ProductMapper;
 import pl.ecommerce.product.read.application.service.ProductCacheService;
@@ -25,6 +25,7 @@ import java.util.UUID;
 
 @Slf4j
 @RequiredArgsConstructor
+@Repository
 public class ProductReadRepositoryImpl implements ProductReadRepositoryCustom {
 
 	private final ReactiveMongoTemplate mongoTemplate;
@@ -169,7 +170,6 @@ public class ProductReadRepositoryImpl implements ProductReadRepositoryCustom {
 				.flatMap(count ->
 						mongoTemplate.find(query, ProductReadModel.class)
 								.flatMap(product -> {
-									// Sprawdź czy podsumowanie jest w cache
 									return cacheService.getProductSummary(product.getId())
 											.switchIfEmpty(Mono.defer(() -> {
 												ProductSummary summary = ProductMapper.toProductSummary(product);
@@ -186,14 +186,14 @@ public class ProductReadRepositoryImpl implements ProductReadRepositoryCustom {
 
 	@Override
 	public Mono<UpdateResult> updatePrice(UUID productId, BigDecimal price, BigDecimal discountedPrice,
-										  String traceId, String spanId) {
+										  String currency, String traceId, String spanId) {
 		log.debug("Updating price for product: {}, price: {}, discountedPrice: {}, traceId: {}",
 				productId, price, discountedPrice, traceId);
 
-		Query query = Query.query(Criteria.where("_id").is(productId));
 		Update update = new Update()
 				.set("price.regular", price)
 				.set("price.discounted", discountedPrice)
+				.set("price.currency", currency)
 				.set("updatedAt", Instant.now())
 				.set("lastTraceId", traceId)
 				.set("lastSpanId", spanId)
@@ -209,7 +209,6 @@ public class ProductReadRepositoryImpl implements ProductReadRepositoryCustom {
 		log.debug("Updating stock for product: {}, quantity: {}, warehouseId: {}, traceId: {}",
 				productId, quantity, warehouseId, traceId);
 
-		Query query = Query.query(Criteria.where("_id").is(productId));
 		Update update = new Update()
 				.set("stock.available", quantity)
 				.set("stock.warehouseId", warehouseId)
@@ -226,7 +225,6 @@ public class ProductReadRepositoryImpl implements ProductReadRepositoryCustom {
 	public Mono<UpdateResult> updateField(UUID id, String field, Object value, String traceId) {
 		log.debug("Updating field '{}' for product: {}, traceId: {}", field, id, traceId);
 
-		Query query = Query.query(Criteria.where("_id").is(id));
 		Update update = new Update()
 				.set(field, value)
 				.set("lastTraceId", traceId)

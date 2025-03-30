@@ -1,18 +1,13 @@
 package pl.ecommerce.product.read.infrastructure.repository;
 
-import com.mongodb.client.result.UpdateResult;
-import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.mongodb.repository.Query;
 import org.springframework.data.mongodb.repository.ReactiveMongoRepository;
 import org.springframework.stereotype.Repository;
-import pl.ecommerce.product.read.api.dto.ProductSummary;
 import pl.ecommerce.product.read.domain.model.ProductReadModel;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
-import java.math.BigDecimal;
-import java.util.Set;
 import java.util.UUID;
 
 @Repository

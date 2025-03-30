@@ -2,7 +2,6 @@ package pl.ecommerce.product.read.api;
 
 import io.micrometer.observation.Observation;
 import io.micrometer.observation.ObservationRegistry;
-import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -13,7 +12,7 @@ import org.springframework.web.server.ServerWebExchange;
 import pl.ecommerce.commons.tracing.TracingContext;
 import pl.ecommerce.product.read.api.dto.CacheStatisticsResponse;
 import pl.ecommerce.product.read.application.service.ProductCacheService;
-import pl.ecommerce.product.read.infrastructure.monitoring.CacheMetricsCollector;
+import pl.ecommerce.product.read.infrastructure.cahce.CacheMetricsCollector;
 import reactor.core.publisher.Mono;
 
 import java.util.UUID;
@@ -103,7 +102,6 @@ public class ProductCacheController implements ProductCacheApi {
 									traceId
 							);
 
-							// Record stats in metrics collector
 							metricsCollector.recordCacheStats(stats.getHits(), stats.getMisses(), stats.getSize());
 
 							return response;

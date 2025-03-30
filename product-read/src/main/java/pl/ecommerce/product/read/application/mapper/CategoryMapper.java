@@ -1,11 +1,13 @@
 package pl.ecommerce.product.read.application.mapper;
 
+import lombok.experimental.UtilityClass;
 import pl.ecommerce.product.read.api.dto.CategoryResponse;
 import pl.ecommerce.product.read.api.dto.CategorySummary;
 import pl.ecommerce.product.read.domain.model.CategoryReadModel;
 
 import java.util.Collections;
 
+@UtilityClass
 public class CategoryMapper {
 
 	public static CategoryResponse toCategoryResponse(CategoryReadModel category) {
@@ -26,7 +28,7 @@ public class CategoryMapper {
 				.productCount(category.getProductCount())
 				.createdAt(category.getCreatedAt())
 				.updatedAt(category.getUpdatedAt())
-				.children(Collections.emptyList()) // Wypełniane później
+				.children(Collections.emptyList())
 				.build();
 	}
 

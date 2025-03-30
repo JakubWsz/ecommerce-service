@@ -16,11 +16,10 @@ import pl.ecommerce.customer.write.domain.commands.UpdateShippingAddressCommand;
 import pl.ecommerce.customer.write.domain.commands.RemoveShippingAddressCommand;
 import pl.ecommerce.customer.write.domain.commands.UpdateCustomerPreferencesCommand;
 import pl.ecommerce.customer.write.domain.commands.DeactivateCustomerCommand;
-import pl.ecommerce.commons.tracing.TracingContext;
 
 public interface CommandMapper {
 
-	static RegisterCustomerCommand map(CustomerRegistrationRequest request, TracingContext tracingContext) {
+	static RegisterCustomerCommand map(CustomerRegistrationRequest request) {
 		return RegisterCustomerCommand.builder()
 				.customerId(UUID.randomUUID())
 				.email(request.email())
@@ -29,22 +28,19 @@ public interface CommandMapper {
 				.phoneNumber(request.phoneNumber())
 				.password(request.password())
 				.consents(request.consents())
-				.tracingContext(tracingContext)
 				.build();
 	}
 
-	static UpdateCustomerCommand map(UUID id, CustomerUpdateRequest request, TracingContext tracingContext) {
+	static UpdateCustomerCommand map(UUID id, CustomerUpdateRequest request) {
 		return UpdateCustomerCommand.builder()
 				.customerId(id)
 				.firstName(request.firstName())
 				.lastName(request.lastName())
 				.phoneNumber(request.phoneNumber())
-				.tracingContext(tracingContext)
 				.build();
 	}
 
-	static AddShippingAddressCommand map(UUID id, AddShippingAddressRequest request,
-										 TracingContext tracingContext) {
+	static AddShippingAddressCommand map(UUID id, AddShippingAddressRequest request) {
 		return AddShippingAddressCommand.builder()
 				.customerId(id)
 				.addressType(AddressType.valueOf(request.addressType()))
@@ -54,14 +50,12 @@ public interface CommandMapper {
 				.city(request.city())
 				.postalCode(request.postalCode())
 				.country(request.country())
-				.state(request.state())
+				.voivodeship(request.voivodeship())
 				.isDefault(request.isDefault())
-				.tracingContext(tracingContext)
 				.build();
 	}
 
-	static UpdateShippingAddressCommand map(UUID id, UUID addressId, UpdateShippingAddressRequest request,
-											TracingContext tracingContext) {
+	static UpdateShippingAddressCommand map(UUID id, UUID addressId, UpdateShippingAddressRequest request) {
 		return UpdateShippingAddressCommand.builder()
 				.customerId(id)
 				.addressId(addressId)
@@ -71,33 +65,29 @@ public interface CommandMapper {
 				.city(request.city())
 				.postalCode(request.postalCode())
 				.country(request.country())
-				.state(request.state())
+				.voivodeship(request.voivodeship())
 				.isDefault(request.isDefault())
-				.tracingContext(tracingContext)
 				.build();
 	}
 
-	static RemoveShippingAddressCommand map(UUID id, UUID addressId, TracingContext tracingContext) {
+	static RemoveShippingAddressCommand map(UUID id, UUID addressId) {
 		return RemoveShippingAddressCommand.builder()
 				.customerId(id)
 				.addressId(addressId)
-				.tracingContext(tracingContext)
 				.build();
 	}
 
-	static UpdateCustomerPreferencesCommand map(UUID id, UpdatePreferencesRequest request, TracingContext tracingContext) {
+	static UpdateCustomerPreferencesCommand map(UUID id, UpdatePreferencesRequest request) {
 		return UpdateCustomerPreferencesCommand.builder()
 				.customerId(id)
 				.preferences(map(request))
-				.tracingContext(tracingContext)
 				.build();
 	}
 
-	static DeactivateCustomerCommand map(UUID id, String reason, TracingContext tracingContext) {
+	static DeactivateCustomerCommand map(UUID id, String reason) {
 		return DeactivateCustomerCommand.builder()
 				.customerId(id)
 				.reason(reason)
-				.tracingContext(tracingContext)
 				.build();
 	}
 

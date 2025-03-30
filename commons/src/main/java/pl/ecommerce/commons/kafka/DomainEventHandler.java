@@ -6,9 +6,11 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.common.header.Header;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.kafka.support.Acknowledgment;
 import pl.ecommerce.commons.event.DomainEvent;
+import pl.ecommerce.commons.kafka.dlq.DlqMetrics;
 
 import java.lang.reflect.Method;
 import java.nio.charset.StandardCharsets;
@@ -23,6 +25,9 @@ public abstract class DomainEventHandler {
 
 	protected final ObjectMapper objectMapper;
 	protected final TopicsProvider topicsProvider;
+
+	@Autowired(required = false)
+	private DlqMetrics dlqMetrics;
 
 	private final Map<Class<? extends DomainEvent>, Method> handlerMethods = new HashMap<>();
 
@@ -98,7 +103,11 @@ public abstract class DomainEventHandler {
 
 		} catch (Exception e) {
 			log.error("Error processing Kafka message: {}", e.getMessage(), e);
-			//todo DLQ
+
+			if (dlqMetrics != null) {
+				dlqMetrics.recordDlqMessage(record.topic());
+			}
+
 			ack.acknowledge();
 		}
 	}

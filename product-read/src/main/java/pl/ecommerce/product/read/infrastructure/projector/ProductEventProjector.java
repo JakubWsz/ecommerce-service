@@ -8,6 +8,7 @@ import pl.ecommerce.commons.event.product.*;
 import pl.ecommerce.commons.kafka.DomainEventHandler;
 import pl.ecommerce.commons.kafka.EventHandler;
 import pl.ecommerce.commons.kafka.TopicsProvider;
+import pl.ecommerce.product.read.application.service.ProductCacheService;
 import pl.ecommerce.product.read.domain.model.ProductReadModel;
 import pl.ecommerce.product.read.infrastructure.repository.CategoryReadRepository;
 import pl.ecommerce.product.read.infrastructure.repository.ProductReadRepository;
@@ -17,6 +18,7 @@ import reactor.core.publisher.Mono;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 
@@ -28,13 +30,17 @@ public class ProductEventProjector extends DomainEventHandler {
 
 	private final ProductReadRepository productRepository;
 	private final CategoryReadRepository categoryRepository;
+	private final ProductCacheService cacheService;
 
 	public ProductEventProjector(ProductReadRepository productRepository,
-								 ObjectMapper objectMapper, TopicsProvider topicsProvider,
-								 CategoryReadRepository categoryRepository) {
+								 ObjectMapper objectMapper,
+								 TopicsProvider topicsProvider,
+								 CategoryReadRepository categoryRepository,
+								 ProductCacheService cacheService) {
 		super(objectMapper, topicsProvider);
 		this.productRepository = productRepository;
 		this.categoryRepository = categoryRepository;
+		this.cacheService = cacheService;
 	}
 
 	@EventHandler
@@ -43,18 +49,27 @@ public class ProductEventProjector extends DomainEventHandler {
 		log.info("Projecting ProductPriceUpdatedEvent for product: {}, traceId: {}",
 				event.getAggregateId(), traceId);
 
-		String spanId = event.getTracingContext() != null ? event.getTracingContext().getSpanId() : null;
+		String spanId = Objects.isNull(event.getTracingContext()) ? null : event.getTracingContext().getSpanId();
 
 		productRepository.updatePrice(
 						event.getAggregateId(),
 						event.getPrice(),
 						event.getDiscountedPrice(),
+						event.getCurrency(),
 						traceId,
 						spanId)
 				.doOnSuccess(result -> log.debug("Updated product price in read model: {}, traceId: {}",
 						event.getAggregateId(), traceId))
 				.doOnError(error -> log.error("Error updating product price in read model: {}, traceId: {}",
 						error.getMessage(), traceId, error))
+				.flatMap(result -> {
+					return productRepository.findById(event.getAggregateId())
+							.flatMap(cacheService::cacheProduct)
+							.doOnSuccess(cacheResult -> log.debug("Product cache updated after price change: {}, success: {}",
+									event.getAggregateId(), cacheResult))
+							.doOnError(error -> log.error("Error updating product in cache after price change: {}",
+									error.getMessage()));
+				})
 				.subscribe();
 	}
 
@@ -64,7 +79,7 @@ public class ProductEventProjector extends DomainEventHandler {
 		log.info("Projecting ProductStockUpdatedEvent for product: {}, traceId: {}",
 				event.getAggregateId(), traceId);
 
-		String spanId = event.getTracingContext() != null ? event.getTracingContext().getSpanId() : null;
+		String spanId = Objects.isNull(event.getTracingContext()) ? null : event.getTracingContext().getSpanId();
 
 		productRepository.updateStock(
 						event.getAggregateId(),
@@ -76,6 +91,13 @@ public class ProductEventProjector extends DomainEventHandler {
 						event.getAggregateId(), traceId))
 				.doOnError(error -> log.error("Error updating product stock in read model: {}, traceId: {}",
 						error.getMessage(), traceId, error))
+				.flatMap(result -> {
+					return cacheService.updateProductStock(event.getAggregateId(), event.getQuantity(), 0)
+							.doOnSuccess(cacheResult -> log.debug("Product stock updated in cache: {}, success: {}",
+									event.getAggregateId(), cacheResult))
+							.doOnError(error -> log.error("Error updating product stock in cache: {}",
+									error.getMessage()));
+				})
 				.subscribe();
 	}
 
@@ -87,19 +109,17 @@ public class ProductEventProjector extends DomainEventHandler {
 
 		productRepository.findById(event.getAggregateId())
 				.flatMap(product -> {
-					// Update reserved quantity
 					ProductReadModel.StockInfo stock = product.getStock();
-					if (stock == null) {
+					if (Objects.isNull(stock)) {
 						stock = new ProductReadModel.StockInfo(0, 0, "DEFAULT");
 					}
 
 					stock.setReserved(stock.getReserved() + event.getQuantity());
 					product.setStock(stock);
 
-					// Update tracking info
 					product.setUpdatedAt(event.getTimestamp());
 					product.setLastTraceId(traceId);
-					product.setLastSpanId(event.getTracingContext() != null ? event.getTracingContext().getSpanId() : null);
+					product.setLastSpanId(Objects.isNull(event.getTracingContext()) ? null : event.getTracingContext().getSpanId());
 					product.setLastOperation("ReserveStock");
 					product.setLastUpdatedAt(Instant.now());
 
@@ -109,6 +129,15 @@ public class ProductEventProjector extends DomainEventHandler {
 						event.getAggregateId(), traceId))
 				.doOnError(error -> log.error("Error updating product reservation in read model: {}, traceId: {}",
 						error.getMessage(), traceId, error))
+				.flatMap(product -> {
+					int available = product.getStock().getAvailable();
+					int reserved = product.getStock().getReserved();
+					return cacheService.updateProductStock(event.getAggregateId(), available, reserved)
+							.doOnSuccess(result -> log.debug("Product reservation reflected in cache: {}, success: {}",
+									event.getAggregateId(), result))
+							.doOnError(error -> log.error("Error updating product reservation in cache: {}",
+									error.getMessage()));
+				})
 				.subscribe();
 	}
 
@@ -120,9 +149,8 @@ public class ProductEventProjector extends DomainEventHandler {
 
 		productRepository.findById(event.getAggregateId())
 				.flatMap(product -> {
-					// Update stock and reservation quantities
 					ProductReadModel.StockInfo stock = product.getStock();
-					if (stock == null) {
+					if (Objects.isNull(stock)) {
 						stock = new ProductReadModel.StockInfo(0, 0, "DEFAULT");
 					}
 
@@ -131,10 +159,9 @@ public class ProductEventProjector extends DomainEventHandler {
 					stock.setAvailable(Math.max(0, stock.getAvailable() - confirmedQuantity));
 					product.setStock(stock);
 
-					// Update tracking info
 					product.setUpdatedAt(event.getTimestamp());
 					product.setLastTraceId(traceId);
-					product.setLastSpanId(event.getTracingContext() != null ? event.getTracingContext().getSpanId() : null);
+					product.setLastSpanId(Objects.isNull(event.getTracingContext()) ? null : event.getTracingContext().getSpanId());
 					product.setLastOperation("ConfirmReservation");
 					product.setLastUpdatedAt(Instant.now());
 
@@ -144,6 +171,24 @@ public class ProductEventProjector extends DomainEventHandler {
 						event.getAggregateId(), traceId))
 				.doOnError(error -> log.error("Error confirming product reservation in read model: {}, traceId: {}",
 						error.getMessage(), traceId, error))
+				.flatMap(product -> {
+					int available = product.getStock().getAvailable();
+					int reserved = product.getStock().getReserved();
+
+					if (available <= 0) {
+						return cacheService.removeProduct(event.getAggregateId())
+								.doOnSuccess(result -> log.debug("Product removed from cache (no stock): {}, success: {}",
+										event.getAggregateId(), result))
+								.doOnError(error -> log.error("Error removing product from cache: {}",
+										error.getMessage()));
+					} else {
+						return cacheService.updateProductStock(event.getAggregateId(), available, reserved)
+								.doOnSuccess(result -> log.debug("Product reservation confirmation reflected in cache: {}, success: {}",
+										event.getAggregateId(), result))
+								.doOnError(error -> log.error("Error handling reservation confirmation in cache: {}",
+										error.getMessage()));
+					}
+				})
 				.subscribe();
 	}
 
@@ -155,19 +200,17 @@ public class ProductEventProjector extends DomainEventHandler {
 
 		productRepository.findById(event.getAggregateId())
 				.flatMap(product -> {
-					// Reset reserved quantity
 					ProductReadModel.StockInfo stock = product.getStock();
-					if (stock == null) {
+					if (Objects.isNull(stock)) {
 						stock = new ProductReadModel.StockInfo(0, 0, "DEFAULT");
 					}
 
 					stock.setReserved(0);
 					product.setStock(stock);
 
-					// Update tracking info
 					product.setUpdatedAt(event.getTimestamp());
 					product.setLastTraceId(traceId);
-					product.setLastSpanId(event.getTracingContext() != null ? event.getTracingContext().getSpanId() : null);
+					product.setLastSpanId(Objects.isNull(event.getTracingContext()) ? null : event.getTracingContext().getSpanId());
 					product.setLastOperation("ReleaseReservation");
 					product.setLastUpdatedAt(Instant.now());
 
@@ -177,6 +220,15 @@ public class ProductEventProjector extends DomainEventHandler {
 						event.getAggregateId(), traceId))
 				.doOnError(error -> log.error("Error releasing product reservation in read model: {}, traceId: {}",
 						error.getMessage(), traceId, error))
+				.flatMap(product -> {
+					int available = product.getStock().getAvailable();
+					int reserved = product.getStock().getReserved();
+					return cacheService.updateProductStock(event.getAggregateId(), available, reserved)
+							.doOnSuccess(result -> log.debug("Product reservation release reflected in cache: {}, success: {}",
+									event.getAggregateId(), result))
+							.doOnError(error -> log.error("Error handling reservation release in cache: {}",
+									error.getMessage()));
+				})
 				.subscribe();
 	}
 
@@ -188,12 +240,10 @@ public class ProductEventProjector extends DomainEventHandler {
 
 		productRepository.findById(event.getAggregateId())
 				.flatMap(product -> {
-					// Initialize variants list if needed
-					if (product.getVariants() == null) {
+					if (Objects.isNull(product.getVariants())) {
 						product.setVariants(new ArrayList<>());
 					}
 
-					// Create new variant
 					ProductReadModel.ProductVariant variant = new ProductReadModel.ProductVariant();
 					variant.setId(event.getVariantId());
 					variant.setSku(event.getSku());
@@ -202,26 +252,22 @@ public class ProductEventProjector extends DomainEventHandler {
 									attr.getName(), attr.getValue(), attr.getUnit()))
 							.collect(java.util.stream.Collectors.toList()));
 
-					// Set variant price
 					ProductReadModel.PriceInfo price = new ProductReadModel.PriceInfo();
 					price.setRegular(event.getPrice());
-					price.setCurrency("USD"); // Default currency
+					price.setCurrency("USD");
 					variant.setPrice(price);
 
-					// Set variant stock
 					ProductReadModel.StockInfo stock = new ProductReadModel.StockInfo();
 					stock.setAvailable(event.getStock());
 					stock.setReserved(0);
-					stock.setWarehouseId("DEFAULT"); // Default warehouse
+					stock.setWarehouseId("DEFAULT");
 					variant.setStock(stock);
 
-					// Add variant to product
 					product.getVariants().add(variant);
 
-					// Update tracking info
 					product.setUpdatedAt(event.getTimestamp());
 					product.setLastTraceId(traceId);
-					product.setLastSpanId(event.getTracingContext() != null ? event.getTracingContext().getSpanId() : null);
+					product.setLastSpanId(Objects.isNull(event.getTracingContext()) ? null : event.getTracingContext().getSpanId());
 					product.setLastOperation("AddVariant");
 					product.setLastUpdatedAt(Instant.now());
 
@@ -231,6 +277,11 @@ public class ProductEventProjector extends DomainEventHandler {
 						event.getAggregateId(), traceId))
 				.doOnError(error -> log.error("Error adding product variant to read model: {}, traceId: {}",
 						error.getMessage(), traceId, error))
+				.flatMap(product -> cacheService.cacheProduct(product)
+						.doOnSuccess(result -> log.debug("Product cache updated after variant addition: {}, success: {}",
+								event.getAggregateId(), result))
+						.doOnError(error -> log.error("Error updating product in cache after variant addition: {}",
+								error.getMessage())))
 				.subscribe();
 	}
 
@@ -242,7 +293,6 @@ public class ProductEventProjector extends DomainEventHandler {
 
 		ProductReadModel product = buildProductReadModel(event, traceId);
 
-		// Aktualizacja liczników produktów w kategoriach - zbiorczo
 		Set<UUID> categoryIds = product.getCategoryIds();
 
 		productRepository.save(product)
@@ -250,11 +300,17 @@ public class ProductEventProjector extends DomainEventHandler {
 					log.debug("Product read model saved successfully: {}, traceId: {}",
 							saved.getId(), traceId);
 
-					// Zrobimy jedną operację zbiorcza dla wszystkich kategorii
 					batchUpdateCategoryProductCounts(categoryIds, traceId);
 				})
 				.doOnError(error -> log.error("Error saving product read model: {}, traceId: {}",
 						error.getMessage(), traceId, error))
+				.flatMap(saved -> {
+					return cacheService.cacheProduct(saved)
+							.doOnSuccess(result -> log.debug("Product cached: {}, success: {}",
+									event.getProductId(), result))
+							.doOnError(error -> log.error("Error caching product: {}",
+									error.getMessage()));
+				})
 				.subscribe();
 	}
 
@@ -264,28 +320,22 @@ public class ProductEventProjector extends DomainEventHandler {
 		log.info("Projecting ProductUpdatedEvent for product: {}, traceId: {}",
 				event.getAggregateId(), traceId);
 
-		// Aktualizacja liczników produktów, jeśli zmieniono kategorie
-		if (event.getChanges().containsKey("categories")) {
+		if (event.getChangedFields().containsKey("categories")) {
 			productRepository.findById(event.getAggregateId())
 					.flatMap(product -> {
-						Set<UUID> oldCategories = product.getCategoryIds() != null ? product.getCategoryIds() : new HashSet<>();
+						Set<UUID> oldCategories = Objects.nonNull(product.getCategoryIds()) ? product.getCategoryIds() : new HashSet<>();
 						@SuppressWarnings("unchecked")
-						Set<UUID> newCategories = (Set<UUID>) event.getChanges().get("categories");
+						Set<UUID> newCategories = (Set<UUID>) event.getChangedFields().get("categories");
 
-						// Zróbmy aktualizację zliczania produktów bardziej atomowo
 						if (!oldCategories.equals(newCategories)) {
-							// Zbieramy kategorie, które zostały usunięte
 							Set<UUID> removedCategories = new HashSet<>(oldCategories);
 							removedCategories.removeAll(newCategories);
 
-							// Zbieramy kategorie, które zostały dodane
 							Set<UUID> addedCategories = new HashSet<>(newCategories);
 							addedCategories.removeAll(oldCategories);
 
-							// Aktualizujemy liczniki w usuwanych kategoriach
 							batchUpdateCategoryProductCounts(removedCategories, -1, traceId);
 
-							// Aktualizujemy liczniki w dodawanych kategoriach
 							batchUpdateCategoryProductCounts(addedCategories, 1, traceId);
 						}
 
@@ -300,6 +350,15 @@ public class ProductEventProjector extends DomainEventHandler {
 						event.getAggregateId(), result.getModifiedCount(), traceId))
 				.doOnError(error -> log.error("Error updating product read model: {}, traceId: {}",
 						error.getMessage(), traceId, error))
+				.flatMap(result -> {
+					return cacheService.removeProduct(event.getAggregateId())
+							.then(productRepository.findById(event.getAggregateId()))
+							.flatMap(cacheService::cacheProduct)
+							.doOnSuccess(cacheResult -> log.debug("Product cache updated: {}, success: {}",
+									event.getAggregateId(), cacheResult))
+							.doOnError(error -> log.error("Error updating product in cache: {}",
+									error.getMessage()));
+				})
 				.subscribe();
 	}
 
@@ -309,12 +368,10 @@ public class ProductEventProjector extends DomainEventHandler {
 		log.info("Projecting ProductDeletedEvent for product: {}, traceId: {}",
 				event.getAggregateId(), traceId);
 
-		String spanId = event.getTracingContext() != null ? event.getTracingContext().getSpanId() : null;
+		String spanId = Objects.isNull(event.getTracingContext()) ? null : event.getTracingContext().getSpanId();
 
-		// Pobierz produkt, aby uzyskać jego kategorie przed usunięciem
 		productRepository.findById(event.getAggregateId())
 				.flatMap(product -> {
-					// Jednoczesna aktualizacja wszystkich liczników dla kategorii
 					batchUpdateCategoryProductCounts(product.getCategoryIds(), -1, traceId);
 
 					return productRepository.markAsDeleted(event.getAggregateId(), traceId, spanId);
@@ -323,62 +380,52 @@ public class ProductEventProjector extends DomainEventHandler {
 						event.getAggregateId(), traceId))
 				.doOnError(error -> log.error("Error marking product as deleted in read model: {}, traceId: {}",
 						error.getMessage(), traceId, error))
+				.flatMap(result -> {
+					return cacheService.removeProduct(event.getAggregateId())
+							.doOnSuccess(cacheResult -> log.debug("Product removed from cache: {}, success: {}",
+									event.getAggregateId(), cacheResult))
+							.doOnError(error -> log.error("Error removing product from cache: {}",
+									error.getMessage()));
+				})
 				.subscribe();
 	}
 
-	/**
-	 * Jednoczesna aktualizacja licznika produktów dla wielu kategorii.
-	 * Zamiast robić osobne wywołania dla każdej kategorii, zbieramy je i przetwarzamy razem.
-	 */
 	private void batchUpdateCategoryProductCounts(Set<UUID> categoryIds, String traceId) {
 		batchUpdateCategoryProductCounts(categoryIds, 1, traceId);
 	}
 
-	/**
-	 * Jednoczesna aktualizacja licznika produktów dla wielu kategorii z określonym przyrostem.
-	 */
 	private void batchUpdateCategoryProductCounts(Set<UUID> categoryIds, int delta, String traceId) {
-		if (categoryIds == null || categoryIds.isEmpty()) {
+		if (Objects.isNull(categoryIds) || categoryIds.isEmpty()) {
 			return;
 		}
 
 		log.debug("Batch updating product count for {} categories, delta: {}, traceId: {}",
 				categoryIds.size(), delta, traceId);
 
-		// Zbiór kategorii nadrzędnych, do których także trzeba zaktualizować liczniki
 		Set<UUID> parentCategoriesToUpdate = new HashSet<>();
 
-		// Jednoczesna aktualizacja wszystkich kategorii
 		Mono.just(categoryIds)
-				.flatMapMany(ids -> {
-					// Dla każdej kategorii zbieramy także jej rodziców
-					return Flux.fromIterable(ids)
-							.flatMap(categoryId ->
-									// Najpierw aktualizujemy bieżącą kategorię
-									categoryRepository.incrementProductCount(categoryId, delta, traceId)
-											.doOnSuccess(result -> log.debug("Updated product count for category: {}, delta: {}, modified: {}, traceId: {}",
-													categoryId, delta, result.getModifiedCount(), traceId))
-											.then(
-													// Następnie znajdujemy kategorie nadrzędne
-													categoryRepository.findById(categoryId)
-															.flatMap(category -> {
-																if (category.getParentCategoryId() != null) {
-																	// Dodajemy kategorię nadrzędną do zbioru do zaktualizowania
-																	parentCategoriesToUpdate.add(category.getParentCategoryId());
-																}
-																return Mono.empty();
-															})
-											)
-							)
-							// Po przetworzeniu wszystkich kategorii, zbieramy unikalne kategorie nadrzędne
-							.thenMany(Flux.fromIterable(parentCategoriesToUpdate))
-							// I rekurencyjnie aktualizujemy liczniki dla kategorii nadrzędnych
-							.flatMap(parentId ->
-									categoryRepository.incrementProductCount(parentId, delta, traceId)
-											.doOnSuccess(result -> log.debug("Updated product count for parent category: {}, delta: {}, modified: {}, traceId: {}",
-													parentId, delta, result.getModifiedCount(), traceId))
-							);
-				})
+				.flatMapMany(ids -> Flux.fromIterable(ids)
+						.flatMap(categoryId ->
+								categoryRepository.incrementProductCount(categoryId, delta, traceId)
+										.doOnSuccess(result -> log.debug("Updated product count for category: {}, delta: {}, modified: {}, traceId: {}",
+												categoryId, delta, result.getModifiedCount(), traceId))
+										.then(
+												categoryRepository.findById(categoryId)
+														.flatMap(category -> {
+															if (Objects.nonNull(category.getParentCategoryId())) {
+																parentCategoriesToUpdate.add(category.getParentCategoryId());
+															}
+															return Mono.empty();
+														})
+										)
+						)
+						.thenMany(Flux.fromIterable(parentCategoriesToUpdate))
+						.flatMap(parentId ->
+								categoryRepository.incrementProductCount(parentId, delta, traceId)
+										.doOnSuccess(result -> log.debug("Updated product count for parent category: {}, delta: {}, modified: {}, traceId: {}",
+												parentId, delta, result.getModifiedCount(), traceId))
+						))
 				.doOnError(error -> log.error("Error batch updating category product counts: {}, traceId: {}",
 						error.getMessage(), traceId, error))
 				.subscribe();

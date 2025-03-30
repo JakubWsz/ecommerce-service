@@ -21,13 +21,13 @@ public class CustomerAddressAddedEvent extends CustomerEvent {
 	private String city;
 	private String postalCode;
 	private String country;
-	private String state;
+	private String voivodeship;
 	private boolean isDefault;
 
 	@Builder
 	public CustomerAddressAddedEvent(UUID customerId, UUID addressId,
 									 AddressType addressType, String buildingNumber, String apartmentNumber, String street, String city,
-									 String postalCode, String country, String state,
+									 String postalCode, String country, String voivodeship,
 									 boolean isDefault, Instant timestamp, int version) {
 		super(customerId, version, timestamp);
 		this.addressId = addressId;
@@ -38,7 +38,7 @@ public class CustomerAddressAddedEvent extends CustomerEvent {
 		this.city = city;
 		this.postalCode = postalCode;
 		this.country = country;
-		this.state = state;
+		this.voivodeship = voivodeship;
 		this.isDefault = isDefault;
 	}
 }

@@ -18,7 +18,7 @@ public class Address {
 	private String buildingNumber;
 	private String apartmentNumber;
 	private String city;
-	private String state;
+	private String voivodeship;
 	private String postalCode;
 	private String country;
 	private boolean isDefault;

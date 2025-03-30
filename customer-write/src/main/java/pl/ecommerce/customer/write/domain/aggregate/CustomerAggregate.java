@@ -7,12 +7,16 @@ import pl.ecommerce.commons.event.DomainEvent;
 import pl.ecommerce.commons.event.EventApplier;
 import pl.ecommerce.commons.event.customer.*;
 import pl.ecommerce.commons.model.customer.*;
+import pl.ecommerce.commons.tracing.TracingContextHolder;
 import pl.ecommerce.customer.write.domain.commands.*;
 import pl.ecommerce.customer.write.domain.handler.*;
 import pl.ecommerce.customer.write.infrastructure.exception.*;
 
 import java.time.Instant;
 import java.util.*;
+
+import static java.util.Objects.isNull;
+import static java.util.Objects.nonNull;
 
 @Getter
 public class CustomerAggregate {
@@ -99,6 +103,10 @@ public class CustomerAggregate {
 	}
 
 	protected void applyChange(DomainEvent event) {
+		if (event.getTracingContext() == null && TracingContextHolder.getContext() != null) {
+			event.setTracingContext(TracingContextHolder.getContext());
+		}
+
 		apply(event);
 		uncommittedEvents.add(event);
 		version++;
@@ -106,7 +114,7 @@ public class CustomerAggregate {
 
 	protected void apply(DomainEvent event) {
 		EventApplier applier = eventAppliers.get(event.getClass());
-		if (applier != null) {
+		if (nonNull(applier)) {
 			applier.apply(event);
 		}
 	}
@@ -114,7 +122,7 @@ public class CustomerAggregate {
 	private <T extends Command> void executeCommand(T command) {
 		@SuppressWarnings("unchecked")
 		CommandHandler<T> handler = (CommandHandler<T>) commandHandlers.get(command.getClass());
-		if (handler != null) {
+		if (nonNull(handler)) {
 			handler.handle(command);
 		}
 	}
@@ -132,7 +140,7 @@ public class CustomerAggregate {
 			this.email = e.getEmail();
 			this.firstName = e.getFirstName();
 			this.lastName = e.getLastName();
-			this.phoneNumber = e.getPhoneNumber() != null ? new PhoneNumber(e.getPhoneNumber()) : null;
+			this.phoneNumber = nonNull(e.getPhoneNumber()) ? new PhoneNumber(e.getPhoneNumber()) : null;
 			this.status = CustomerStatus.ACTIVE;
 			this.emailVerified = false;
 			this.phoneVerified = false;
@@ -190,7 +198,7 @@ public class CustomerAggregate {
 					e.getBuildingNumber(),
 					e.getApartmentNumber(),
 					e.getCity(),
-					e.getState(),
+					e.getVoivodeship(),
 					e.getPostalCode(),
 					e.getCountry(),
 					e.isDefault()
@@ -201,7 +209,7 @@ public class CustomerAggregate {
 			} else {
 				this.shippingAddresses.add(newAddress);
 
-				if (e.isDefault() || this.defaultShippingAddressId == null) {
+				if (e.isDefault() || isNull(this.defaultShippingAddressId)) {
 					this.defaultShippingAddressId = newAddress.getId();
 				}
 			}
@@ -211,7 +219,7 @@ public class CustomerAggregate {
 
 		eventAppliers.put(CustomerAddressUpdatedEvent.class, event -> {
 			CustomerAddressUpdatedEvent e = (CustomerAddressUpdatedEvent) event;
-			if (this.billingAddress != null && this.billingAddress.getId().equals(e.getAddressId())) {
+			if (nonNull(this.billingAddress) && this.billingAddress.getId().equals(e.getAddressId())) {
 				this.billingAddress = new Address(
 						e.getAddressId(),
 						AddressType.BILLING,
@@ -219,7 +227,7 @@ public class CustomerAggregate {
 						e.getBuildingNumber(),
 						e.getApartmentNumber(),
 						e.getCity(),
-						e.getState(),
+						e.getVoivodeship(),
 						e.getPostalCode(),
 						e.getCountry(),
 						e.isDefault()
@@ -234,7 +242,7 @@ public class CustomerAggregate {
 								e.getBuildingNumber(),
 								e.getApartmentNumber(),
 								e.getCity(),
-								e.getState(),
+								e.getVoivodeship(),
 								e.getPostalCode(),
 								e.getCountry(),
 								e.isDefault()
@@ -255,7 +263,7 @@ public class CustomerAggregate {
 			CustomerAddressRemovedEvent e = (CustomerAddressRemovedEvent) event;
 			this.shippingAddresses.removeIf(address -> address.getId().equals(e.getAddressId()));
 
-			if (this.defaultShippingAddressId != null && this.defaultShippingAddressId.equals(e.getAddressId())) {
+			if (nonNull(this.defaultShippingAddressId) && this.defaultShippingAddressId.equals(e.getAddressId())) {
 				this.defaultShippingAddressId = this.shippingAddresses.isEmpty() ? null : this.shippingAddresses.getFirst().getId();
 			}
 

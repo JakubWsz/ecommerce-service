@@ -89,7 +89,6 @@ public class CategoryQueryService {
 				.map(subcategories -> {
 					CategoryResponse response = CategoryMapper.toCategoryResponse(category);
 					response.setTraceId(getTraceId(tracingContext));
-					// Dodanie podsumowania podkategorii do odpowiedzi
 					response.setChildren(subcategories.stream()
 							.peek(summary -> summary.setTraceId(getTraceId(tracingContext)))
 							.collect(Collectors.toList()));

@@ -14,4 +14,8 @@ public record UpdateBankDetailsCommand(
 		String bankSwiftCode,
 		TracingContext tracingContext
 ) implements Command {
+	@Override
+	public UUID getId() {
+		return vendorId;
+	}
 }

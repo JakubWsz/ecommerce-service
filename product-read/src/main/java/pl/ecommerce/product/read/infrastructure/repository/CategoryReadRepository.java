@@ -1,6 +1,5 @@
 package pl.ecommerce.product.read.infrastructure.repository;
 
-import org.springframework.data.mongodb.core.query.Update;
 import org.springframework.data.mongodb.repository.Query;
 import org.springframework.data.mongodb.repository.ReactiveMongoRepository;
 import org.springframework.stereotype.Repository;

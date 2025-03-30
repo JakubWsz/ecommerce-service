@@ -1,6 +1,5 @@
 package pl.ecommerce.product.read.infrastructure.repository;
 
-import com.mongodb.client.result.UpdateResult;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.mongodb.core.query.Update;
@@ -34,7 +33,8 @@ public interface ProductReadRepositoryCustom {
 
 	Flux<ProductSummary> findRelatedProducts(UUID productId, int limit, String traceId);
 
-	Mono<UpdateResult> updatePrice(UUID productId, BigDecimal price, BigDecimal discountedPrice, String traceId, String spanId);
+	Mono<UpdateResult> updatePrice(UUID productId, BigDecimal price, BigDecimal discountedPrice, String currency,
+								   String traceId, String spanId);
 
 	Mono<UpdateResult> updateStock(UUID productId, int quantity, String warehouseId, String traceId, String spanId);
 
