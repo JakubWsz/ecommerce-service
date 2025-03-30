@@ -1,13 +1,11 @@
 # Development environment configuration
 spring:
-  profiles:
-    active: dev
 
   # JDBC configuration for event store
   datasource:
     url: jdbc:postgresql://localhost:5432/customer_event_store
-    username: customer_user
-    password: customer_password
+    username: postgres
+    password: postgres
     hikari:
       maximum-pool-size: 5
       minimum-idle: 2

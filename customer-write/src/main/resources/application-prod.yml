@@ -1,7 +1,5 @@
 # Production environment configuration
 spring:
-  profiles:
-    active: prod
 
   # JDBC configuration for event store
   datasource:

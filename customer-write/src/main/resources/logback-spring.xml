@@ -25,7 +25,7 @@
     </appender>
 
     <appender name="LOGSTASH" class="net.logstash.logback.appender.LogstashTcpSocketAppender">
-        <destination>${LOGSTASH_HOST:-elasticsearch}:${LOGSTASH_PORT:-9200}</destination>
+        <destination>${LOGSTASH_HOST:-logstash}:${LOGSTASH_PORT:-5044}</destination>
         <keepAliveDuration>5 minutes</keepAliveDuration>
         <reconnectionDelay>5 seconds</reconnectionDelay>
         <encoder class="net.logstash.logback.encoder.LogstashEncoder">
@@ -46,6 +46,7 @@
     <logger name="org.springframework" level="INFO"/>
     <logger name="org.hibernate" level="WARN"/>
     <logger name="org.apache.kafka" level="WARN"/>
+    <statusListener class="ch.qos.logback.core.status.OnConsoleStatusListener"/>
 
     <springProfile name="local">
         <root level="INFO">

@@ -38,8 +38,8 @@ ORDER BY aggregate_id, version DESC;
 CREATE OR REPLACE VIEW customer_verification_view AS
 SELECT
     customer_id,
-    MAX(CASE WHEN verification_type = 'email' THEN is_verified ELSE false END) AS email_verified,
-    MAX(CASE WHEN verification_type = 'phone' THEN is_verified ELSE false END) AS phone_verified
+    BOOL_OR(verification_type = 'email' AND is_verified) AS email_verified,
+    BOOL_OR(verification_type = 'phone' AND is_verified) AS phone_verified
 FROM (
          SELECT
              aggregate_id AS customer_id,

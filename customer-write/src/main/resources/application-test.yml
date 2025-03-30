@@ -1,7 +1,5 @@
 # Test environment configuration
 spring:
-  profiles:
-    active: test
 
   # JDBC configuration for PostgreSQL with TestContainers
   datasource:
