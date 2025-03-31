@@ -4,6 +4,8 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import pl.ecommerce.commons.tracing.TracingContext;
+import pl.ecommerce.commons.tracing.TracingContextHolder;
 import pl.ecommerce.customer.write.domain.aggregate.CustomerAggregate;
 import pl.ecommerce.customer.write.domain.commands.*;
 import pl.ecommerce.customer.write.infrastructure.exception.CustomerAlreadyExistsException;
@@ -16,6 +18,7 @@ import java.util.Objects;
 import java.util.UUID;
 import java.util.function.Consumer;
 
+import static pl.ecommerce.commons.tracing.TracingContextHolder.CONTEXT_KEY;
 import static pl.ecommerce.commons.tracing.TracingContextHolder.getTraceId;
 
 @Service
@@ -27,9 +30,14 @@ public class CustomerApplicationService {
 	private final CustomerRepository customerRepository;
 
 	public Mono<UUID> registerCustomer(RegisterCustomerCommand command) {
-		String traceId = getTraceId();
-		log.info("Registering new customer with email: {}, traceId: {}", command.email(), getTraceId());
-		return processRegistration(command, traceId);
+		return Mono.deferContextual(contextView -> {
+			// W nowych wersjach Reactora używamy ContextView
+			TracingContext tracingContext = contextView.getOrDefault(CONTEXT_KEY, null);
+			String traceId = tracingContext != null ? tracingContext.getTraceId() : "unknown";
+
+			log.info("Registering new customer with email: {}, traceId: {}", command.email(), traceId);
+			return processRegistration(command, traceId, tracingContext);
+		});
 	}
 
 	public Mono<UUID> updateCustomer(UpdateCustomerCommand command) {
@@ -145,7 +153,7 @@ public class CustomerApplicationService {
 						.build()));
 	}
 
-	private Mono<UUID> processRegistration(RegisterCustomerCommand command, String traceId) {
+	private Mono<UUID> processRegistration(RegisterCustomerCommand command, String traceId, TracingContext tracingContext) {
 		return customerRepository.existsByEmail(command.email())
 				.flatMap(exists -> {
 					if (exists) {
@@ -157,6 +165,11 @@ public class CustomerApplicationService {
 					}
 					UUID customerId = Objects.nonNull(command.customerId()) ? command.customerId() : UUID.randomUUID();
 					CustomerAggregate customer = new CustomerAggregate(command);
+
+					if (Objects.nonNull(tracingContext)) {
+						customer.getUncommittedEvents().forEach(event -> event.setTracingContext(tracingContext));
+					}
+
 					return customerRepository.save(customer)
 							.doOnSuccess(savedCustomer -> log.info("Customer registered successfully: {}, traceId: {}", customerId, traceId))
 							.map(CustomerAggregate::getId);

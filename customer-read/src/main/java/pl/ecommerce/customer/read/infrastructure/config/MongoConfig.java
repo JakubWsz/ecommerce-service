@@ -30,9 +30,7 @@ public class MongoConfig {
 	public MongoCustomConversions mongoCustomConversions() {
 		return new MongoCustomConversions(
 				Arrays.asList(
-						new UuidToStringConverter(),
-						new StringToUuidConverter()
-				)
+						new UuidToStringConverter())
 		);
 	}
 
@@ -43,15 +41,29 @@ public class MongoConfig {
 		}
 	}
 
-	private static class StringToUuidConverter implements org.springframework.core.convert.converter.Converter<String, UUID> {
-		@Override
-		public UUID convert(String source) {
-			return UUID.fromString(source);
-		}
-	}
+//	private static class StringToUuidConverter implements org.springframework.core.convert.converter.Converter<String, UUID> {
+//		@Override
+//		public UUID convert(String source) {
+//			return UUID.fromString(source);
+//		}
+//	}
 
-	@Bean
-	public void customizeMongoMappingConverter(MappingMongoConverter converter) {
-		converter.setTypeMapper(new DefaultMongoTypeMapper(null));
-	}
+//	private static class StringToUuidConverter implements org.springframework.core.convert.converter.Converter<String, UUID> {
+//		@Override
+//		public UUID convert(String source) {
+//			try {
+//				return UUID.fromString(source);
+//			} catch (IllegalArgumentException e) {
+//				// Log error or handle it as required
+//				System.err.println("Invalid UUID string: " + source);
+//				return null;  // Or consider a default UUID if applicable
+//			}
+//		}
+//	}
+
+//	@Bean
+//	public MappingMongoConverter customizeMongoMappingConverter(MappingMongoConverter converter) {
+//		converter.setTypeMapper(new DefaultMongoTypeMapper(null));
+//		return converter;
+//	}
 }

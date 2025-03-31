@@ -44,16 +44,15 @@ logging:
     org.springframework.web: INFO
     org.springframework.security: INFO
     org.springframework.kafka: INFO
-#  elasticsearch:
-#    host: elasticsearch
-#    port: 9200
+  pattern:
+    level: "%5p [${spring.application.name:},%X{traceId:-},%X{spanId:-}]"
 
 # Actuator endpoints
 management:
   endpoints:
     web:
       exposure:
-        include: health,info,prometheus,metrics,env
+        include: health,info,prometheus,metrics,loggers
   endpoint:
     health:
       show-details: always
@@ -67,6 +66,9 @@ management:
   tracing:
     sampling:
       probability: 1.0
+    enabled: true
+    propagation:
+      type: w3c
   prometheus:
     metrics:
       export:
@@ -74,6 +76,12 @@ management:
     tags:
       application: ${spring.application.name}
       environment: ${spring.profiles.active:default}
+    distribution:
+      percentiles-histogram:
+        http.server.requests: true
+      percentiles:
+        http.server.requests: 0.5, 0.9, 0.95, 0.99
+
 
 # OpenAPI documentation
 springdoc:
@@ -120,5 +128,14 @@ kafka:
     topics: customer.registered.event.DLT,customer.updated.event.DLT,customer.email-changed.event.DLT,customer.email-verified.event.DLT,customer.phone-verified.event.DLT,customer.address-added.event.DLT,customer.address-updated.event.DLT,customer.address-removed.event.DLT,customer.preferences-updated.event.DLT,customer.deactivated.event.DLT,customer.reactivated.event.DLT,customer.deleted.event.DLT
 
 opentelemetry:
+  sdk:
+    disabled: false
+  service:
+    name: ${spring.application.name}
+  traces:
+    exporter: otlp
+  metrics:
+    exporter: prometheus
   otlp:
     endpoint: http://otel-collector:4317
+    protocol: grpc

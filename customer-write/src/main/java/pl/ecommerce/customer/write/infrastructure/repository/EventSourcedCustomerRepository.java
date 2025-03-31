@@ -39,12 +39,25 @@ public class EventSourcedCustomerRepository implements CustomerRepository {
 			return Mono.just(customer);
 		}
 
-		ensureTracingContext(uncommittedEvents);
+		return Mono.deferContextual(contextView -> {
+			// Pobierz TracingContext z kontekstu Reactora
+			TracingContext tracingContext = TracingContextHolder.getFromContext(contextView);
 
-		return Mono.fromCallable(() -> persistEvents(customer, uncommittedEvents))
-				.flatMap(savedCustomer -> publishEvents(uncommittedEvents)
-						.then(Mono.fromRunnable(savedCustomer::clearUncommittedEvents))
-						.thenReturn(savedCustomer));
+			if (Objects.nonNull(tracingContext)) {
+				uncommittedEvents.forEach(event -> {
+					if (Objects.isNull(event.getTracingContext())) {
+						event.setTracingContext(tracingContext);
+					}
+				});
+			} else {
+				ensureTracingContext(uncommittedEvents);
+			}
+
+			return Mono.fromCallable(() -> persistEvents(customer, uncommittedEvents))
+					.flatMap(savedCustomer -> publishEvents(uncommittedEvents)
+							.then(Mono.fromRunnable(savedCustomer::clearUncommittedEvents))
+							.thenReturn(savedCustomer));
+		});
 	}
 
 	@Override

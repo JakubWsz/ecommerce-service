@@ -7,14 +7,16 @@ import lombok.extern.slf4j.Slf4j;
 import org.aspectj.lang.ProceedingJoinPoint;
 import org.aspectj.lang.annotation.Around;
 import org.aspectj.lang.annotation.Aspect;
+import org.slf4j.MDC;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Component;
 import org.springframework.web.server.ServerWebExchange;
 import reactor.core.publisher.Mono;
-import reactor.util.context.Context;
 
 import java.util.UUID;
+
+import static pl.ecommerce.commons.tracing.TracingContextHolder.CONTEXT_KEY;
 
 @Slf4j
 @Aspect
@@ -28,12 +30,15 @@ public class TracingAspect {
 	public Object traceOperation(ProceedingJoinPoint joinPoint, TracedOperation tracedOperation) throws Throwable {
 		ServerWebExchange exchange = extractServerWebExchange(joinPoint.getArgs());
 		if (exchange == null) {
-			log.warn("ServerWebExchange not found in method arguments for operation: {}", tracedOperation.value());
+			log.warn("ServerWebExchange not found for operation: {}", tracedOperation.value());
 			return joinPoint.proceed();
 		}
 
 		TracingContext tracingContext = createTracingContext(exchange, tracedOperation.value());
 		String traceId = tracingContext.getTraceId();
+
+		// Dodaj traceId do MDC
+		MDC.put("traceId", traceId);
 
 		log.info("Executing operation: {} with traceId: {}", tracedOperation.value(), traceId);
 
@@ -47,10 +52,11 @@ public class TracingAspect {
 
 			if (result instanceof Mono<?>) {
 				return observation.observe(() -> ((Mono<?>) result)
-						.contextWrite(Context.of(TracingContext.class, tracingContext))
+						.contextWrite(ctx -> ctx.put(CONTEXT_KEY, tracingContext))
 						.doOnEach(signal -> {
-							if (signal.isOnNext() || signal.isOnError()) {
+							if (signal.hasValue() || signal.hasError()) {
 								TracingContextHolder.setContext(tracingContext);
+								MDC.put("traceId", traceId);
 							}
 						})
 						.map(response -> {
@@ -63,16 +69,19 @@ public class TracingAspect {
 									return new ResponseEntity<>(original.getBody(), headers, original.getStatusCode());
 								}
 							}
-
 							return response;
 						})
-						.doFinally(signalType -> TracingContextHolder.clearContext()));
+						.doFinally(signalType -> {
+							MDC.remove("traceId");
+							TracingContextHolder.clearContext();
+						}));
 			}
 
 			log.warn("Method must return Mono<ResponseEntity<?>>, but returned: {}",
 					result != null ? result.getClass().getName() : "null");
 			return result;
 		} finally {
+			MDC.remove("traceId");
 			TracingContextHolder.clearContext();
 		}
 	}

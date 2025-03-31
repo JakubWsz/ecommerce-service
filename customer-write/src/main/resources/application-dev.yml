@@ -24,6 +24,7 @@ logging:
 server:
   error:
     include-stacktrace: always
+  port: 8081
 
 # Actuator endpoints - all for development
 management:

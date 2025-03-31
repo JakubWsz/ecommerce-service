@@ -6,11 +6,13 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.common.header.Header;
+import org.slf4j.MDC;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.kafka.support.Acknowledgment;
 import pl.ecommerce.commons.event.DomainEvent;
 import pl.ecommerce.commons.kafka.dlq.DlqMetrics;
+import pl.ecommerce.commons.tracing.TracingContext;
 
 import java.lang.reflect.Method;
 import java.nio.charset.StandardCharsets;
@@ -76,39 +78,87 @@ public abstract class DomainEventHandler {
 			containerFactory = "kafkaListenerContainerFactory"
 	)
 	public void consume(ConsumerRecord<String, Object> record, Acknowledgment ack) {
+		String traceId = "unknown";
+		for (Header header : record.headers()) {
+			if ("trace-id".equals(header.key())) {
+				traceId = new String(header.value(), StandardCharsets.UTF_8);
+				break;
+			}
+		}
+
+		MDC.put("traceId", traceId);
+
 		try {
 			Object value = record.value();
 
 			if (!(value instanceof DomainEvent event)) {
-				log.error("Received message is not a DomainEvent: {}", value);
+				log.error("Received message is not a DomainEvent: {}, traceId: {}", value, traceId);
 				ack.acknowledge();
 				return;
 			}
+
+			setTracingContextFromHeaders(record, event);
 
 			String eventType = event.getClass().getSimpleName();
 			String key = record.key();
 			UUID aggregateId = event.getAggregateId();
 
-			log.info("Received event: {} with key: {}, aggregateId: {}",
-					eventType, key, aggregateId);
+			log.info("Received event: {} with key: {}, aggregateId: {}, traceId: {}",
+					eventType, key, aggregateId, traceId);
 
 			Map<String, String> headers = extractHeaders(record);
 
 			boolean processed = processEvent(event, headers);
 			if (!processed) {
-				log.info("No handler found for event type: {}", eventType);
+				log.info("No handler found for event type: {}, traceId: {}", eventType, traceId);
 			}
 
 			ack.acknowledge();
-
 		} catch (Exception e) {
-			log.error("Error processing Kafka message: {}", e.getMessage(), e);
-
-			if (dlqMetrics != null) {
-				dlqMetrics.recordDlqMessage(record.topic());
-			}
-
+			log.error("Error processing Kafka message, traceId: {}: {}", traceId, e.getMessage(), e);
 			ack.acknowledge();
+		} finally {
+			MDC.remove("traceId");
+		}
+	}
+
+	private void setTracingContextFromHeaders(ConsumerRecord<?, ?> record, DomainEvent event) {
+		String traceId = null;
+		String spanId = null;
+		String userId = null;
+		String sourceService = null;
+		String sourceOperation = null;
+
+		for (Header header : record.headers()) {
+			switch (header.key()) {
+				case "trace-id":
+					traceId = new String(header.value(), StandardCharsets.UTF_8);
+					break;
+				case "span-id":
+					spanId = new String(header.value(), StandardCharsets.UTF_8);
+					break;
+				case "user-id":
+					userId = new String(header.value(), StandardCharsets.UTF_8);
+					break;
+				case "source-service":
+					sourceService = new String(header.value(), StandardCharsets.UTF_8);
+					break;
+				case "source-operation":
+					sourceOperation = new String(header.value(), StandardCharsets.UTF_8);
+					break;
+			}
+		}
+
+		if (traceId != null) {
+			TracingContext tracingContext = TracingContext.builder()
+					.traceId(traceId)
+					.spanId(spanId)
+					.userId(userId)
+					.sourceService(sourceService)
+					.sourceOperation(sourceOperation)
+					.build();
+
+			event.setTracingContext(tracingContext);
 		}
 	}
 
