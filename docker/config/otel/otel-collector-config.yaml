@@ -10,33 +10,52 @@ processors:
   batch:
     timeout: 1s
     send_batch_size: 1024
-  resourcedetection:
-    detectors: [env, system]
-    timeout: 2s
   memory_limiter:
     check_interval: 1s
-    limit_mib: 1000
+    limit_percentage: 80
+    spike_limit_percentage: 25
+  resource:
+    attributes:
+      - key: service.name
+        value: ${env:SERVICE_NAME}
+        action: upsert
+      - key: deployment.environment
+        value: ${env:DEPLOYMENT_ENVIRONMENT}
+        action: upsert
+#      - key: service.profile
+#        value: ${env:SPRING_PROFILES_ACTIVE:default}
+#        action: upsert
 
 exporters:
-  logging:
-    loglevel: debug
-  jaeger:
-    endpoint: jaeger:14250
+  otlp:
+    endpoint: ${env:JAEGER_ENDPOINT}
     tls:
       insecure: true
-  elasticsearch:
-    endpoints: ["http://elasticsearch:9200"]
-    index: "traces"
   prometheus:
     endpoint: 0.0.0.0:8889
+  debug:
+    verbosity: detailed
+
+extensions:
+  health_check:
+    endpoint: 0.0.0.0:13133
+  pprof:
+    endpoint: 0.0.0.0:1777
+  zpages:
+    endpoint: 0.0.0.0:55679
 
 service:
+  extensions: [health_check, pprof, zpages]
   pipelines:
     traces:
       receivers: [otlp]
-      processors: [batch, memory_limiter, resourcedetection]
-      exporters: [logging, jaeger, elasticsearch]
+      processors: [memory_limiter, batch, resource]
+      exporters: [otlp]
     metrics:
       receivers: [otlp]
-      processors: [batch, memory_limiter, resourcedetection]
+      processors: [memory_limiter, batch, resource]
       exporters: [prometheus]
+    logs:
+      receivers: [otlp]
+      processors: [memory_limiter, batch, resource]
+      exporters: [debug]

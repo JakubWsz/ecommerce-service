@@ -66,6 +66,10 @@ spec:
                 configMapKeyRef:
                   name: elasticsearch-config
                   key: host
+            - name: LOGSTASH_HOST
+              value: "logstash-service"
+            - name: LOGSTASH_PORT
+              value: "5000"
           livenessProbe:
             httpGet:
               path: /actuator/health/liveness

@@ -26,6 +26,9 @@ spring:
         ssl.keystore.password: ${KAFKA_KEYSTORE_PASSWORD}
         ssl.key.password: ${KAFKA_KEY_PASSWORD}
 
+deployment:
+  environment: production
+
 # Server settings - secure for production
 server:
   error:
@@ -37,22 +40,6 @@ server:
     key-store-password: ${SSL_KEYSTORE_PASSWORD}
     key-store-type: PKCS12
     key-alias: customer-write
-
-# Logging configuration - more restricted for production
-logging:
-  level:
-    root: WARN
-    pl.ecommerce: INFO
-    org.springframework.web: WARN
-    org.springframework.security: WARN
-    org.springframework.kafka: WARN
-  elasticsearch:
-    host: ${ELASTICSEARCH_HOST}
-    port: 9200
-  logstash:
-    enabled: true
-    host: ${LOGSTASH_HOST}
-    port: 5044
 
 # Actuator endpoints - restricted for production
 management:

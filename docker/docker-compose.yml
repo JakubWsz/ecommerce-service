@@ -199,9 +199,14 @@ services:
 
   # OpenTelemetry Collector
   otel-collector:
-    image: otel/opentelemetry-collector:latest
+    image: otel/opentelemetry-collector-contrib:latest
     container_name: ecommerce-otel-collector
-    command: ["--config=/etc/otel-collector-config.yaml"]
+    environment:
+      - JAEGER_ENDPOINT=jaeger:4317
+      - SERVICE_NAME=otel-collector
+      - DEPLOYMENT_ENVIRONMENT=development
+#      - SPRING_PROFILES_ACTIVE=dev
+    command: [ "--config=/etc/otel-collector-config.yaml" ]
     volumes:
       - ./config/otel/otel-collector-config.yaml:/etc/otel-collector-config.yaml
     ports:
@@ -278,8 +283,10 @@ services:
     image: logstash:7.17.0
     container_name: ecommerce-logstash
     volumes:
-      - ../config/logstash/pipeline:/usr/share/logstash/pipeline
-      - ../config/logstash/config:/usr/share/logstash/config
+      - ./config/logstash/pipeline:/usr/share/logstash/pipeline
+      - ./config/logstash/config/logstash.yml:/usr/share/logstash/config/logstash.yml
+      - ./config/logstash/config/log4j2.properties:/usr/share/logstash/config/log4j2.properties
+      - ./config/logstash/config/jvm.options:/usr/share/logstash/config/jvm.options
     environment:
       LS_JAVA_OPTS: "-Xmx256m -Xms256m"
       LOGSTASH_BIND_ADDRESS: "0.0.0.0"
@@ -317,48 +324,19 @@ services:
 
 # Filebeat
   filebeat:
-   image: elastic/filebeat:7.17.0
-   container_name: ecommerce-filebeat
-   environment:
-     - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
-     - FILEBEAT_CONFIG_STRICT_PERMS=false
-   command: >
-     bash -c 'cat > /usr/share/filebeat/filebeat.yml << EOF
-     filebeat.inputs:
-     - type: container
-       paths:
-         - "/var/lib/docker/containers/*/*.log"
-       json.keys_under_root: true
-       json.message_key: log
-     
-     - type: docker
-       containers.ids:
-         - "*"
-       json.keys_under_root: true
-     
-     processors:
-       - add_docker_metadata: ~
-     
-     output.elasticsearch:
-       hosts: ["elasticsearch:9200"]
-       index: "app-logs-%{+yyyy.MM.dd}"
-     
-     setup.kibana:
-       host: "kibana:5601"
-     
-     logging.level: debug
-     EOF
-     && filebeat -e -strict.perms=false'
-   volumes:
-     - /var/lib/docker/containers:/var/lib/docker/containers:ro
-     - /var/run/docker.sock:/var/run/docker.sock:ro
-     - filebeat-data:/usr/share/filebeat/data
-   user: root
-   networks:
-     - elk-network
-   depends_on:
-     elasticsearch:
-       condition: service_healthy
+    image: elastic/filebeat:7.17.0
+    container_name: ecommerce-filebeat
+    user: root
+    volumes:
+      - ./config/filebeat/filebeat.yml:/usr/share/filebeat/filebeat.yml:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - filebeat-data:/usr/share/filebeat/data
+    networks:
+      - elk-network
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
 
   # Prometheus
   prometheus:
@@ -417,18 +395,12 @@ services:
     image: curlimages/curl:latest
     container_name: ecommerce-grafana-provisioner
     volumes:
-      - ../config/grafana/provisioning:/config
+      - ./config/grafana/datasources:/config/datasources
     command: >
       sh -c '
         sleep 30 &&
         curl -X POST -H "Content-Type: application/json" -d @/config/datasources/prometheus-datasource.json http://admin:admin@grafana:3000/api/datasources
       '
-    networks:
-      - monitoring-network
-    depends_on:
-      grafana:
-        condition: service_healthy
-    restart: no
 
   # Alert Manager
   alertmanager:

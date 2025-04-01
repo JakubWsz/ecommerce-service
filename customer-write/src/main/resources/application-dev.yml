@@ -11,14 +11,18 @@ spring:
       minimum-idle: 2
       idle-timeout: 300000
 
-# Logging configuration - extended for development
 logging:
+  logstash:
+    host: ${LOGSTASH_HOST:localhost}
+    port: ${LOGSTASH_PORT:5000}
   level:
-    org.springframework.web: DEBUG
-    org.springframework.security: DEBUG
-    org.springframework.kafka: DEBUG
-    org.hibernate.SQL: DEBUG
-    org.hibernate.type.descriptor.sql.BasicBinder: TRACE
+    root: INFO
+    pl.ecommerce: DEBUG
+  pattern:
+    level: "%5p [${spring.application.name:},%X{traceId:-},%X{spanId:-}]"
+
+deployment:
+  environment: development
 
 # Server settings - verbose errors for development
 server:

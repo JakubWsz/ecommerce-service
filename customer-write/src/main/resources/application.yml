@@ -38,12 +38,12 @@ server:
 
 # Logging configuration
 logging:
+  logstash:
+    host: ${LOGSTASH_HOST:localhost}
+    port: ${LOGSTASH_PORT:5000}
   level:
     root: INFO
     pl.ecommerce: DEBUG
-    org.springframework.web: INFO
-    org.springframework.security: INFO
-    org.springframework.kafka: INFO
   pattern:
     level: "%5p [${spring.application.name:},%X{traceId:-},%X{spanId:-}]"
 
