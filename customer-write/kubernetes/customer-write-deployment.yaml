@@ -52,6 +52,20 @@ spec:
                 configMapKeyRef:
                   name: elasticsearch-config
                   key: port
+            - name: LOGSTASH_HOST
+              value: "logstash-service"
+            - name: LOGSTASH_PORT
+              value: "5000"
+            - name: SERVICE_NAME
+              value: "customer-write"
+            - name: DEPLOYMENT_ENVIRONMENT
+              value: "production"
+            - name: JAEGER_ENDPOINT
+              value: "http://jaeger:4317"
+            - name: OTEL_RESOURCE_ATTRIBUTES
+              value: "service.name=customer-write,service.profile=prod,deployment.environment=production"
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: "http://otel-collector:4317"
           livenessProbe:
             httpGet:
               path: /actuator/health/liveness
@@ -71,6 +85,12 @@ spec:
             requests:
               cpu: "500m"
               memory: "512Mi"
+          volumeMounts:
+            - name: app-logs
+              mountPath: /app/logs
+      volumes:
+        - name: app-logs
+          emptyDir: {}
 ---
 apiVersion: v1
 kind: Service

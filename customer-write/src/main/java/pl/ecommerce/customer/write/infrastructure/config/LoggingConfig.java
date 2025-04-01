@@ -1,21 +1,21 @@
 //package pl.ecommerce.customer.write.infrastructure.config;
 //
-//import jakarta.annotation.PostConstruct;
-//import org.springframework.context.annotation.Configuration;
 //import ch.qos.logback.classic.LoggerContext;
+//import jakarta.annotation.PostConstruct;
 //import net.logstash.logback.appender.LogstashTcpSocketAppender;
 //import net.logstash.logback.encoder.LogstashEncoder;
 //import org.slf4j.LoggerFactory;
 //import org.springframework.beans.factory.annotation.Value;
+//import org.springframework.context.annotation.Configuration;
 //
 //@Configuration
 //public class LoggingConfig {
 //
-//	@Value("${logging.elasticsearch.host:localhost}")
-//	private String elasticsearchHost;
+//	@Value("${logging.logstash.host:localhost}")
+//	private String logstashHost;
 //
-//	@Value("${logging.elasticsearch.port:9200}")
-//	private int elasticsearchPort;
+//	@Value("${logging.logstash.port:5000}")
+//	private int logstashPort;
 //
 //	@PostConstruct
 //	public void setupLogging() {
@@ -24,9 +24,10 @@
 //		LogstashTcpSocketAppender logstashAppender = new LogstashTcpSocketAppender();
 //		logstashAppender.setName("logstash");
 //		logstashAppender.setContext(loggerContext);
-//		logstashAppender.addDestination(elasticsearchHost + ":" + elasticsearchPort);
+//		logstashAppender.addDestination(logstashHost + ":" + logstashPort);
 //
 //		LogstashEncoder encoder = new LogstashEncoder();
+//		encoder.setIncludeMdc(true);
 //		encoder.setContext(loggerContext);
 //		encoder.start();
 //
@@ -35,11 +36,5 @@
 //
 //		ch.qos.logback.classic.Logger rootLogger = loggerContext.getLogger(org.slf4j.Logger.ROOT_LOGGER_NAME);
 //		rootLogger.addAppender(logstashAppender);
-//	}
-//
-//	@PostConstruct
-//	public void init() {
-//		System.out.println("LOGSTASH_HOST (ENV): " + System.getenv("LOGSTASH_HOST"));
-//		System.out.println("LOGSTASH_PORT (ENV): " + System.getenv("LOGSTASH_PORT"));
 //	}
 //}

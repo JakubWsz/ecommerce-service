@@ -4,6 +4,7 @@ import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import java.util.Map;
@@ -21,9 +22,11 @@ public class DlqMetrics {
 	private final Map<String, Counter> dlqTopicCounters = new ConcurrentHashMap<>();
 	private final AtomicInteger dlqPendingGauge;
 	private final Timer dlqProcessingTimer;
+	private final String serviceName;
 
-	public DlqMetrics(MeterRegistry registry) {
-		String serviceName = System.getProperty("spring.application.name", "unknown");
+	public DlqMetrics(MeterRegistry registry,
+					  @Value("${spring.application.name:unknown}") String serviceName) {
+		this.serviceName=serviceName;
 
 		dlqMessagesTotal = Counter.builder("dlq_messages_total")
 				.description("Total number of messages sent to DLQ")
@@ -86,13 +89,10 @@ public class DlqMetrics {
 	}
 
 	private Counter getOrCreateTopicCounter(String topic) {
-		return dlqTopicCounters.computeIfAbsent(topic, t -> {
-			String serviceName = System.getProperty("spring.application.name", "unknown");
-			return Counter.builder("dlq_messages_total")
-					.description("Total number of messages sent to DLQ")
-					.tag("service", serviceName)
-					.tag("topic", t)
-					.register(null);
-		});
+		return dlqTopicCounters.computeIfAbsent(topic, t -> Counter.builder("dlq_messages_total")
+				.description("Total number of messages sent to DLQ")
+				.tag("service", serviceName)
+				.tag("topic", t)
+				.register(null));
 	}
 }

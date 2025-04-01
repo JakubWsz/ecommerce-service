@@ -1,4 +1,4 @@
-//package pl.ecommerce.customer.read.infrastructure.config;
+//package pl.ecommerce.commons.config;
 //
 //import ch.qos.logback.classic.LoggerContext;
 //import jakarta.annotation.PostConstruct;
@@ -8,6 +8,7 @@
 //import org.springframework.beans.factory.annotation.Value;
 //import org.springframework.context.annotation.Configuration;
 //
+//@Slf4j
 //@Configuration
 //public class LoggingConfig {
 //
@@ -19,6 +20,7 @@
 //
 //	@PostConstruct
 //	public void setupLogging() {
+//		log.info("Logstash init: {}:{}", logstashHost, logstashPort);
 //		LoggerContext loggerContext = (LoggerContext) LoggerFactory.getILoggerFactory();
 //
 //		LogstashTcpSocketAppender logstashAppender = new LogstashTcpSocketAppender();

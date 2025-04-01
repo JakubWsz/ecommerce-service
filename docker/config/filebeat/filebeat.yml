@@ -4,20 +4,10 @@ filebeat.inputs:
       - '/var/lib/docker/containers/*/*.log'
     json.keys_under_root: true
     json.message_key: log
-    processors:
-      - add_docker_metadata: ~
-
-  - type: log
-    enabled: true
-    paths:
-      - /var/log/app-logs/*.json
-    json.keys_under_root: true
-    json.add_error_key: true
 
 processors:
-  - add_host_metadata: ~
-  - add_cloud_metadata: ~
   - add_docker_metadata: ~
+  - add_host_metadata: ~
 
 output.elasticsearch:
   hosts: ["elasticsearch:9200"]
@@ -26,5 +16,4 @@ output.elasticsearch:
 setup.kibana:
   host: "kibana:5601"
 
-setup.ilm.enabled: false
-setup.template.enabled: false
+logging.level: debug

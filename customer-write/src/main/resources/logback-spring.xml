@@ -1,53 +1,44 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<configuration>
-    <include resource="org/springframework/boot/logging/logback/defaults.xml"/>
+<configuration scan="false">
 
-    <springProperty scope="context" name="appName" source="spring.application.name" defaultValue="unknown"/>
-    <springProperty scope="context" name="profile" source="spring.profiles.active" defaultValue="default"/>
+    <springProperty name="appName" source="spring.application.name" defaultValue="unknown"/>
+    <springProperty name="env" source="spring.profiles.active" defaultValue="default"/>
+    <springProperty name="logstashHost" source="LOGSTASH_HOST" defaultValue="host.docker.internal"/>
+    <springProperty name="logstashPort" source="LOGSTASH_PORT" defaultValue="5000"/>
 
     <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
         <encoder>
-            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} %5p [${appName},%X{traceId:-unknown},%X{spanId:-unknown}] --- [%15.15t] %-40.40logger{39} : %m%n</pattern>
-        </encoder>
-    </appender>
-
-    <appender name="CONSOLE_JSON" class="ch.qos.logback.core.ConsoleAppender">
-        <encoder class="net.logstash.logback.encoder.LogstashEncoder">
-            <includeMdc>true</includeMdc>
-            <customFields>{"application":"${appName}","environment":"${profile}"}</customFields>
+            <pattern>%d{HH:mm:ss.SSS} %highlight(%-5level) [%X{traceId:-},%X{spanId:-}] --- [%thread] %logger{36} : %msg%n</pattern>
         </encoder>
     </appender>
 
     <appender name="JSON_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
-        <file>logs/${appName}.json</file>
+        <file>logs/${appName}-${env}.json</file>
         <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
-            <fileNamePattern>logs/${appName}-%d{yyyy-MM-dd}.%i.json</fileNamePattern>
+            <fileNamePattern>logs/${appName}-${env}.%d{yyyy-MM-dd}.%i.json</fileNamePattern>
             <maxFileSize>10MB</maxFileSize>
             <maxHistory>7</maxHistory>
         </rollingPolicy>
-        <immediateFlush>true</immediateFlush>
         <encoder class="net.logstash.logback.encoder.LogstashEncoder">
             <includeMdc>true</includeMdc>
-            <customFields>{"application":"${appName}","environment":"${profile}"}</customFields>
+            <customFields>{"application":"${appName}","environment":"${env}"}</customFields>
         </encoder>
     </appender>
 
     <appender name="LOGSTASH" class="net.logstash.logback.appender.LogstashTcpSocketAppender">
-        <destination>localhost:5000</destination>
-        <reconnectionDelay>1 second</reconnectionDelay>
-        <keepAliveDuration>5 minutes</keepAliveDuration>
+        <destination>${logstashHost}:${logstashPort}</destination>
         <encoder class="net.logstash.logback.encoder.LogstashEncoder">
             <includeMdc>true</includeMdc>
-            <customFields>{"application":"${appName}","environment":"${profile}"}</customFields>
+            <customFields>{"application":"${appName}","environment":"${env}"}</customFields>
         </encoder>
     </appender>
 
+    <logger name="pl.ecommerce" level="DEBUG"/>
+
     <root level="INFO">
-        <appender-ref ref="CONSOLE" />
-        <appender-ref ref="CONSOLE_JSON" />
-        <appender-ref ref="JSON_FILE" />
-        <appender-ref ref="LOGSTASH" />
+        <appender-ref ref="CONSOLE"/>
+        <appender-ref ref="JSON_FILE"/>
+        <appender-ref ref="LOGSTASH"/>
     </root>
 
-    <logger name="pl.ecommerce" level="DEBUG" />
 </configuration>
