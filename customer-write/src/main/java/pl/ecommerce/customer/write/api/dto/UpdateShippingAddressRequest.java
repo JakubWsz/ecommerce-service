@@ -18,8 +18,8 @@ public record UpdateShippingAddressRequest(
 		String postalCode,
 		@NotBlank @Schema(description = "Country", example = "USA")
 		String country,
-		@Schema(description = "State", example = "NY")
-		String state,
+		@Schema(description = "Voivodeship", example = "NY")
+		String voivodeship,
 		@NotNull @Schema(description = "Is default address", example = "true")
 		boolean isDefault
 ) {

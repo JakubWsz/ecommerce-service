@@ -21,4 +21,8 @@ public record RegisterVendorCommand(
 		BigDecimal commissionRate,
 		TracingContext tracingContext
 ) implements Command {
+	@Override
+	public UUID getId() {
+		return vendorId;
+	}
 }

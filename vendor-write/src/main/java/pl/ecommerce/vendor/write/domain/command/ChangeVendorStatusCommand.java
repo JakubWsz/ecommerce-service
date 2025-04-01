@@ -14,4 +14,8 @@ public record ChangeVendorStatusCommand(
 		String reason,
 		TracingContext tracingContext
 ) implements Command {
+	@Override
+	public UUID getId() {
+		return vendorId;
+	}
 }

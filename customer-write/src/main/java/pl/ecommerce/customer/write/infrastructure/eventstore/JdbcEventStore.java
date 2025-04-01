@@ -10,6 +10,7 @@ import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 import pl.ecommerce.commons.event.DomainEvent;
 import pl.ecommerce.commons.tracing.TracingContext;
+import pl.ecommerce.commons.tracing.TracingContextHolder;
 import pl.ecommerce.customer.write.infrastructure.exception.ConcurrencyException;
 import pl.ecommerce.customer.write.infrastructure.exception.EventStoreException;
 
@@ -18,6 +19,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.Objects;
 
 @Component
 @RequiredArgsConstructor
@@ -38,6 +40,13 @@ public class JdbcEventStore implements EventStore {
 		}
 
 		for (DomainEvent event : events) {
+			if (Objects.isNull(event.getTracingContext())) {
+				TracingContext tracingContext = TracingContextHolder.getContext();
+				if (Objects.nonNull(tracingContext)) {
+					event.setTracingContext(tracingContext);
+				}
+			}
+
 			currentVersion = saveSingleEvent(aggregateId, currentVersion, event);
 		}
 	}
@@ -69,10 +78,10 @@ public class JdbcEventStore implements EventStore {
 
 	private int getCurrentVersion(UUID aggregateId) {
 		Integer version = jdbcTemplate.queryForObject(
-				"SELECT MAX(version) FROM event_store WHERE aggregate_id = ? AND deleted = false",
+				"SELECT COALESCE(MAX(version), 0) FROM event_store WHERE aggregate_id = ? AND deleted = false",
 				Integer.class,
 				aggregateId);
-		return version != null ? version : 0;
+		return Objects.nonNull(version) ? version : 0;
 	}
 
 	private int saveSingleEvent(UUID aggregateId, int currentVersion, DomainEvent event) {
@@ -80,8 +89,8 @@ public class JdbcEventStore implements EventStore {
 		try {
 			String eventData = objectMapper.writeValueAsString(event);
 			TracingContext tracingContext = event.getTracingContext();
-			String traceId = tracingContext != null ? tracingContext.getTraceId() : null;
-			String spanId = tracingContext != null ? tracingContext.getSpanId() : null;
+			String traceId = Objects.nonNull(tracingContext) ? tracingContext.getTraceId() : null;
+			String spanId = Objects.nonNull(tracingContext) ? tracingContext.getSpanId() : null;
 
 			jdbcTemplate.update(
 					"INSERT INTO event_store (event_id, aggregate_id, aggregate_type, event_type, " +
@@ -125,11 +134,23 @@ public class JdbcEventStore implements EventStore {
 			String eventData = (String) row.get("event_data");
 
 			DomainEvent event = deserializeEvent(eventType, eventData);
-			TracingContext tracingContext = event.getTracingContext();
-			if (tracingContext != null) {
+
+			String traceId = (String) row.get("trace_id");
+			String spanId = (String) row.get("span_id");
+
+			if (Objects.nonNull(traceId)) {
+				TracingContext tracingContext = TracingContext.builder()
+						.traceId(traceId)
+						.spanId(spanId)
+						.sourceService("customer-write")
+						.build();
+
+				event.setTracingContext(tracingContext);
+
 				log.debug("Loaded event {} with traceId {}, spanId {}",
 						eventType, tracingContext.getTraceId(), tracingContext.getSpanId());
 			}
+
 			return event;
 		} catch (Exception e) {
 			log.error("Error deserializing event: {}", e.getMessage(), e);
@@ -141,9 +162,13 @@ public class JdbcEventStore implements EventStore {
 		Class<?> eventClass;
 
 		try {
-			eventClass = Class.forName("pl.ecommerce.customer.commons.events." + eventType);
+			eventClass = Class.forName("pl.ecommerce.commons.event.customer." + eventType);
 		} catch (ClassNotFoundException e) {
-			throw new EventStoreException("Could not find event class for type: " + eventType);
+			try {
+				eventClass = Class.forName("pl.ecommerce.commons.event." + eventType);
+			} catch (ClassNotFoundException ex) {
+				throw new EventStoreException("Could not find event class for type: " + eventType);
+			}
 		}
 
 		return (DomainEvent) objectMapper.readValue(eventData, eventClass);

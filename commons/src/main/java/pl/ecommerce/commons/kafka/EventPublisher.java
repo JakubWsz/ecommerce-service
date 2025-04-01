@@ -12,91 +12,90 @@ import org.springframework.stereotype.Component;
 import pl.ecommerce.commons.event.DomainEvent;
 import pl.ecommerce.commons.event.Message;
 import pl.ecommerce.commons.tracing.TracingContext;
+import pl.ecommerce.commons.tracing.TracingContextHolder;
 import reactor.core.publisher.Mono;
+import reactor.util.context.ContextView;
 
 import java.nio.charset.StandardCharsets;
-import java.util.Map;
-import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 
+import static java.util.Objects.isNull;
 import static java.util.Objects.nonNull;
 
 @Component
 @RequiredArgsConstructor
 @Slf4j
 public class EventPublisher {
+	public static final String CONTEXT_KEY = "TRACING_CONTEXT";
 	private final KafkaTemplate<String, String> kafkaTemplate;
 	private final ObjectMapper objectMapper;
 
 	public Mono<Void> publish(DomainEvent event) {
-		return publish(event, null, null, null);
+		return publish(event, null, null);
 	}
 
 	public Mono<Void> publish(DomainEvent event, String key) {
-		return publish(event, null, key, null);
+		return publish(event, null, key);
 	}
 
 	public Mono<Void> publish(DomainEvent event, Integer partition) {
-		return publish(event, partition, null, null);
-	}
-
-	public Mono<Void> publish(DomainEvent event, String key, Map<String, String> headers) {
-		return publish(event, null, key, headers);
+		return publish(event, partition, null);
 	}
 
 	public Mono<Void> publish(DomainEvent event, Integer partition, String key) {
-		return publish(event, partition, key, null);
-	}
-
-	public Mono<Void> publish(DomainEvent event, Integer partition, String key, Map<String, String> headers) {
 		if (!event.getClass().isAnnotationPresent(Message.class)) {
 			log.warn("Event {} does not have @Message annotation and will not be sent", event.getClass().getSimpleName());
 			return Mono.empty();
 		}
 
-		try {
-			String eventJson = objectMapper.writeValueAsString(event);
-			String eventType = event.getEventType();
-			String topic = event.getClass().getAnnotation(Message.class).value();
-			String className = event.getClass().getName();
+		return Mono.deferContextual(contextView -> {
+			try {
+				TracingContext tracingContext = getTracingContext(contextView, event);
 
-			ProducerRecord<String, String> record =
-					(partition != null) ? new ProducerRecord<>(topic, partition, key, eventJson)
-							: new ProducerRecord<>(topic, key, eventJson);
+				if (nonNull(tracingContext) && isNull(event.getTracingContext())) {
+					event.setTracingContext(tracingContext);
+				}
 
-			addTracingHeaders(record, event);
+				String eventJson = objectMapper.writeValueAsString(event);
+				String eventType = event.getEventType();
+				String topic = event.getClass().getAnnotation(Message.class).value();
+				String className = event.getClass().getName();
 
-			addCustomHeaders(record, headers);
+				ProducerRecord<String, String> record =
+						(partition != null) ? new ProducerRecord<>(topic, partition, key, eventJson)
+								: new ProducerRecord<>(topic, key, eventJson);
 
-			if (nonNull(className) && !className.isEmpty()) {
-				record.headers().add(new RecordHeader("__TypeId__",
-						className.getBytes(StandardCharsets.UTF_8)));
+				addTracingHeaders(record, event);
+
+				if (nonNull(className) && !className.isEmpty()) {
+					record.headers().add(new RecordHeader("__TypeId__",
+							className.getBytes(StandardCharsets.UTF_8)));
+				}
+
+				String traceId = getTraceId(event, contextView);
+				record.headers().add(new RecordHeader("trace-id",
+						traceId.getBytes(StandardCharsets.UTF_8)));
+
+				log.debug("Publishing event {} to topic {} with traceId {}",
+						eventType, topic, traceId);
+
+				CompletableFuture<SendResult<String, String>> future = kafkaTemplate.send(record).toCompletableFuture();
+
+				return Mono.fromFuture(future)
+						.doOnSuccess(result -> log.debug("Successfully published event {} with offset {}",
+								eventType, result.getRecordMetadata().offset()))
+						.doOnError(error -> log.error("Failed to publish event {}: {}",
+								eventType, error.getLocalizedMessage(), error))
+						.then();
+			} catch (JsonProcessingException e) {
+				log.error("Error serializing event {}: {}", event.getEventType(), e.getLocalizedMessage(), e);
+				return Mono.error(e);
+			} catch (Exception e) {
+				log.error("Unexpected error occurred while publishing event {}: {}",
+						event.getEventType(), e.getLocalizedMessage(), e);
+				return Mono.error(e);
 			}
-
-			String traceId = nonNull(event.getTracingContext()) ?
-					event.getTracingContext().getTraceId() : "unknown";
-			record.headers().add(new RecordHeader("trace-id",
-					traceId.getBytes(StandardCharsets.UTF_8)));
-
-			log.debug("Publishing event {} to topic {} with traceId {}",
-					eventType, topic, traceId);
-
-			CompletableFuture<SendResult<String, String>> future = kafkaTemplate.send(record).toCompletableFuture();
-
-			return Mono.fromFuture(future)
-					.doOnSuccess(result -> log.debug("Successfully published event {} with offset {}",
-							eventType, result.getRecordMetadata().offset()))
-					.doOnError(error -> log.error("Failed to publish event {}: {}",
-							eventType, error.getLocalizedMessage(), error))
-					.then();
-		} catch (JsonProcessingException e) {
-			log.error("Error serializing event {}: {}", event.getEventType(), e.getLocalizedMessage(), e);
-			return Mono.error(e);
-		} catch (Exception e) {
-			log.error("Unexpected error occurred while publishing event {}: {}",
-					event.getEventType(), e.getLocalizedMessage(), e);
-			return Mono.error(e);
-		}
+		});
 	}
 
 	private void addTracingHeaders(ProducerRecord<String, String> record, DomainEvent event) {
@@ -127,15 +126,43 @@ public class EventPublisher {
 		}
 	}
 
-	private void addCustomHeaders(ProducerRecord<String, String> record, Map<String, String> headers) {
-		if (nonNull(headers) && !headers.isEmpty()) {
-			headers.forEach((name, value) -> {
-				if (nonNull(value)) {
-					record.headers().add(new RecordHeader(name, value.getBytes(StandardCharsets.UTF_8)));
-				} else {
-					record.headers().add(new RecordHeader(name, new byte[0]));
-				}
-			});
+	private TracingContext getTracingContext(ContextView contextView, DomainEvent event) {
+		if (nonNull(event.getTracingContext())) {
+			return event.getTracingContext();
 		}
+
+		try {
+			TracingContext fromReactor = contextView.getOrDefault(CONTEXT_KEY, null);
+			if (nonNull(fromReactor)) {
+				return fromReactor;
+			}
+		} catch (Exception e) {
+			log.debug("No tracing context in Reactor context", e);
+		}
+
+		return TracingContextHolder.getContext();
+	}
+
+	private String getTraceId(DomainEvent event, ContextView contextView) {
+		if (nonNull(event.getTracingContext()) &&
+				nonNull(event.getTracingContext().getTraceId())) {
+			return event.getTracingContext().getTraceId();
+		}
+
+		try {
+			TracingContext fromReactor = contextView.getOrDefault(CONTEXT_KEY, null);
+			if (nonNull(fromReactor) && nonNull(fromReactor.getTraceId())) {
+				return fromReactor.getTraceId();
+			}
+		} catch (Exception e) {
+			log.debug("Error getting traceId from Reactor context", e);
+		}
+
+		TracingContext context = TracingContextHolder.getContext();
+		if (nonNull(context) && nonNull(context.getTraceId())) {
+			return context.getTraceId();
+		}
+
+		return "unknown";
 	}
 }

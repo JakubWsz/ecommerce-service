@@ -6,7 +6,7 @@ import jakarta.validation.constraints.NotNull;
 
 @Schema(description = "Request to add a new shipping address")
 public record AddShippingAddressRequest(
-		@NotBlank @Schema(description = "Address type", example = "home")
+		@NotBlank @Schema(description = "Address type", example = "SHIPPING")
 		String addressType,
 		@NotBlank @Schema(description = "Building number", example = "123")
 		String buildingNumber,
@@ -14,14 +14,14 @@ public record AddShippingAddressRequest(
 		String apartmentNumber,
 		@NotBlank @Schema(description = "Street name", example = "Main St")
 		String street,
-		@NotBlank @Schema(description = "City", example = "New York")
+		@NotBlank @Schema(description = "City", example = "Warsaw")
 		String city,
-		@NotBlank @Schema(description = "Postal code", example = "10001")
+		@NotBlank @Schema(description = "Postal code", example = "00-001")
 		String postalCode,
-		@NotBlank @Schema(description = "Country", example = "USA")
+		@NotBlank @Schema(description = "Country", example = "Poland")
 		String country,
-		@Schema(description = "State", example = "NY")
-		String state,
+		@Schema(description = "voivodeship", example = "Masovian")
+		String voivodeship,
 		@NotNull @Schema(description = "Flag indicating if this is the default address", example = "true")
 		boolean isDefault
 ) {

@@ -3,7 +3,6 @@ package pl.ecommerce.customer.write.domain.commands;
 import lombok.Builder;
 import pl.ecommerce.commons.command.Command;
 import pl.ecommerce.commons.model.customer.AddressType;
-import pl.ecommerce.commons.tracing.TracingContext;
 
 import java.util.UUID;
 
@@ -17,7 +16,10 @@ public record AddShippingAddressCommand(UUID customerId,
 										String city,
 										String postalCode,
 										String country,
-										String state,
-										TracingContext tracingContext,
+										String voivodeship,
 										boolean isDefault) implements Command {
+	@Override
+	public UUID getId() {
+		return customerId;
+	}
 }

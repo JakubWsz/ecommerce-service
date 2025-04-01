@@ -1,0 +1,96 @@
+groups:
+  - name: customer-write-alerts
+    rules:
+      - alert: CustomerWriteServiceDown
+        expr: up{job="customer-write"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          service: customer-write
+        annotations:
+          summary: "Customer Write Service is down"
+          description: "The customer-write service instance {{ $labels.instance }} has been down for more than 1 minute."
+
+      - alert: HighErrorRate
+        expr: sum(increase(http_server_requests_seconds_count{status=~"5..", service="customer-write"}[5m])) / sum(increase(http_server_requests_seconds_count{service="customer-write"}[5m])) > 0.05
+        for: 2m
+        labels:
+          severity: warning
+          service: customer-write
+        annotations:
+          summary: "High error rate detected in customer-write service"
+          description: "More than 5% of requests are failing with 5xx errors in the past 5 minutes."
+
+      # Performance alerts
+      - alert: SlowResponseTime
+        expr: histogram_quantile(0.95, sum(rate(http_server_requests_seconds_bucket{service="customer-write"}[5m])) by (le, instance)) > 0.5
+        for: 5m
+        labels:
+          severity: warning
+          service: customer-write
+        annotations:
+          summary: "Slow response time detected"
+          description: "95th percentile of response time is above 500ms for more than 5 minutes on instance {{ $labels.instance }}."
+
+      # Database alerts
+      - alert: DatabaseConnectionPoolSaturation
+        expr: hikaricp_connections_usage{pool="customer-write"} > 0.8
+        for: 3m
+        labels:
+          severity: warning
+          service: customer-write
+        annotations:
+          summary: "Database connection pool nearing saturation"
+          description: "The connection pool usage is above 80% for more than 3 minutes."
+
+      - alert: HighDatabaseLatency
+        expr: histogram_quantile(0.95, sum(rate(spring_data_repository_invocations_seconds_bucket{service="customer-write"}[5m])) by (le, method)) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+          service: customer-write
+        annotations:
+          summary: "High database query latency"
+          description: "95th percentile of database query time is above 100ms for more than 5 minutes on method {{ $labels.method }}."
+
+      # Kafka and event processing alerts
+      - alert: KafkaProducerFailures
+        expr: increase(spring_kafka_template_send_failures_total{service="customer-write"}[5m]) > 0
+        for: 2m
+        labels:
+          severity: warning
+          service: customer-write
+        annotations:
+          summary: "Kafka producer failures detected"
+          description: "The customer-write service is failing to send messages to Kafka."
+
+      - alert: DeadLetterQueueGrowing
+        expr: increase(customer_write_dlq_messages_total[10m]) > 10
+        for: 5m
+        labels:
+          severity: warning
+          service: customer-write
+        annotations:
+          summary: "Dead letter queue is growing"
+          description: "More than 10 messages have been sent to the dead letter queue in the last 10 minutes."
+
+      # Health check alerts
+      - alert: HighMemoryUsage
+        expr: sum(jvm_memory_used_bytes{service="customer-write"}) / sum(jvm_memory_max_bytes{service="customer-write"}) > 0.85
+        for: 5m
+        labels:
+          severity: warning
+          service: customer-write
+        annotations:
+          summary: "High memory usage"
+          description: "JVM memory usage is above 85% for more than 5 minutes."
+
+      - alert: HighCPUUsage
+        expr: process_cpu_usage{service="customer-write"} > 0.8
+        for: 5m
+        labels:
+          severity: warning
+          service: customer-write
+        annotations:
+          summary: "High CPU usage"
+          description: "CPU usage is above 80% for more than 5 minutes on instance {{ $labels.instance }}."

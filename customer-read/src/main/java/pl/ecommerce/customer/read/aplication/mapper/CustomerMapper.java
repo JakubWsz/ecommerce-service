@@ -56,7 +56,7 @@ public interface CustomerMapper {
 				.buildingNumber(address.getBuildingNumber())
 				.apartmentNumber(address.getApartmentNumber())
 				.city(address.getCity())
-				.state(address.getState())
+				.voivodeship(address.getVoivodeship())
 				.postalCode(address.getPostalCode())
 				.country(address.getCountry())
 				.isDefault(address.isDefault())

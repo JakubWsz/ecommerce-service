@@ -1,0 +1,22 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: "otel-collector"
+    static_configs:
+      - targets: ["otel-collector:8889"]
+
+  - job_name: "customer-write"
+    metrics_path: "/actuator/prometheus"
+    static_configs:
+      - targets: ["customer-write:8080"]
+        labels:
+          application: "customer-write"
+
+  - job_name: "customer-read"
+    metrics_path: "/actuator/prometheus"
+    static_configs:
+      - targets: ["customer-read:8082"]
+        labels:
+          application: "customer-read"

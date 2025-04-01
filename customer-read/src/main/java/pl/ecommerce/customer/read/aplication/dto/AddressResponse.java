@@ -18,13 +18,13 @@ public class AddressResponse {
 	@Schema(description = "Apartment number", example = "45")
 	private String apartmentNumber;
 
-	@Schema(description = "City", example = "New York")
+	@Schema(description = "City", example = "Warsaw")
 	private String city;
 
-	@Schema(description = "State", example = "NY")
-	private String state;
+	@Schema(description = "Voivodeship", example = "Masovian")
+	private String voivodeship;
 
-	@Schema(description = "Postal code", example = "10001")
+	@Schema(description = "Postal code", example = "00-001")
 	private String postalCode;
 
 	@Schema(description = "Country", example = "USA")

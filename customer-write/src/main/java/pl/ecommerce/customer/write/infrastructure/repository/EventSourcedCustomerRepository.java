@@ -7,15 +7,18 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
 import pl.ecommerce.commons.event.DomainEvent;
-import pl.ecommerce.customer.write.domain.aggregate.*;
-import pl.ecommerce.customer.write.infrastructure.eventstore.EventStore;
 import pl.ecommerce.commons.kafka.EventPublisher;
+import pl.ecommerce.commons.tracing.TracingContext;
+import pl.ecommerce.commons.tracing.TracingContextHolder;
+import pl.ecommerce.customer.write.domain.aggregate.CustomerAggregate;
+import pl.ecommerce.customer.write.infrastructure.eventstore.EventStore;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 
 import java.util.*;
 
+import static java.util.Objects.isNull;
 import static java.util.Objects.nonNull;
 
 @Repository
@@ -36,11 +39,25 @@ public class EventSourcedCustomerRepository implements CustomerRepository {
 			return Mono.just(customer);
 		}
 
-		return Mono.fromCallable(() -> persistEvents(customer, uncommittedEvents))
-				.flatMap(savedCustomer -> publishEvents(uncommittedEvents)
-						.then(Mono.fromRunnable(savedCustomer::clearUncommittedEvents))
-						.thenReturn(savedCustomer));
+		return Mono.deferContextual(contextView -> {
+			// Pobierz TracingContext z kontekstu Reactora
+			TracingContext tracingContext = TracingContextHolder.getFromContext(contextView);
 
+			if (Objects.nonNull(tracingContext)) {
+				uncommittedEvents.forEach(event -> {
+					if (Objects.isNull(event.getTracingContext())) {
+						event.setTracingContext(tracingContext);
+					}
+				});
+			} else {
+				ensureTracingContext(uncommittedEvents);
+			}
+
+			return Mono.fromCallable(() -> persistEvents(customer, uncommittedEvents))
+					.flatMap(savedCustomer -> publishEvents(uncommittedEvents)
+							.then(Mono.fromRunnable(savedCustomer::clearUncommittedEvents))
+							.thenReturn(savedCustomer));
+		});
 	}
 
 	@Override
@@ -81,6 +98,17 @@ public class EventSourcedCustomerRepository implements CustomerRepository {
 		});
 	}
 
+	private void ensureTracingContext(List<DomainEvent> events) {
+		TracingContext currentContext = TracingContextHolder.getContext();
+		if (nonNull(currentContext)) {
+			for (DomainEvent event : events) {
+				if (isNull(event.getTracingContext())) {
+					event.setTracingContext(currentContext);
+				}
+			}
+		}
+	}
+
 	private CustomerAggregate persistEvents(CustomerAggregate customer, List<DomainEvent> events) {
 		int expectedVersion = customer.getVersion() - events.size();
 		eventStore.saveEvents(customer.getId(), events, expectedVersion);
@@ -97,17 +125,11 @@ public class EventSourcedCustomerRepository implements CustomerRepository {
 
 	private Mono<Void> publishEvents(List<DomainEvent> events) {
 		return Flux.fromIterable(events)
-				.doOnNext(event -> log.info("Publishing event: {} with type: {}", event.getClass().getSimpleName(), event.getEventType()))
-				.flatMap(event -> eventPublisher.publish(event, event.getEventType(), createHeaders(event)))
+				.doOnNext(event -> log.info("Publishing event: {} with type: {}",
+						event.getClass().getSimpleName(), event.getEventType()))
+				.flatMap(eventPublisher::publish)
 				.doOnError(e -> log.error("Error publishing event", e))
 				.then();
-	}
-
-	private Map<String, String> createHeaders(DomainEvent event) {
-		String traceId = nonNull(event.getTracingContext())
-				? event.getTracingContext().getTraceId()
-				: "unknown";
-		return Collections.singletonMap("trace-id", traceId);
 	}
 
 	private CustomerAggregate loadCustomerAggregate(UUID customerId) {
@@ -117,10 +139,12 @@ public class EventSourcedCustomerRepository implements CustomerRepository {
 				log.debug("No events found for customer: {}", customerId);
 				return null;
 			}
-			String traceId = extractTraceId(events);
 			CustomerAggregate customer = new CustomerAggregate(events);
+
+			String traceId = extractTraceId(events);
 			log.debug("Reconstituted customer {} from {} events with traceId: {}",
 					customerId, events.size(), traceId);
+
 			return customer;
 		} catch (Exception e) {
 			log.error("Error finding customer by id {}: {}", customerId, e.getMessage(), e);
@@ -139,7 +163,7 @@ public class EventSourcedCustomerRepository implements CustomerRepository {
 		final String sql = "SELECT COUNT(*) FROM customer_email_view WHERE email = ?";
 		try {
 			Integer count = jdbcTemplate.queryForObject(sql, Integer.class, email);
-			return count != null && count > 0;
+			return nonNull(count) && count > 0;
 		} catch (DataAccessException e) {
 			log.error("Error checking if customer exists by email {}: {}", email, e.getMessage(), e);
 			throw e;
@@ -154,7 +178,7 @@ public class EventSourcedCustomerRepository implements CustomerRepository {
 					(rs, rowNum) -> UUID.fromString(rs.getString("customer_id")),
 					email
 			);
-			return customerIds.isEmpty() ? null : customerIds.get(0);
+			return customerIds.isEmpty() ? null : customerIds.getFirst();
 		} catch (DataAccessException e) {
 			log.error("Error finding customer ID by email {}: {}", email, e.getMessage(), e);
 			throw e;

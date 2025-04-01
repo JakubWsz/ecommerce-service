@@ -14,6 +14,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ServerWebExchange;
 import pl.ecommerce.commons.model.customer.CustomerStatus;
+import pl.ecommerce.commons.tracing.TracedOperation;
 import pl.ecommerce.commons.tracing.TracingContext;
 import pl.ecommerce.customer.read.aplication.dto.CustomerResponse;
 import pl.ecommerce.customer.read.aplication.dto.CustomerSummary;
@@ -33,6 +34,7 @@ public class CustomerQueryController implements CustomerApi {
 	private final ObservationRegistry observationRegistry;
 
 	@Override
+	@TracedOperation("getCustomerById")
 	public Mono<ResponseEntity<CustomerResponse>> getCustomerById(UUID id, ServerWebExchange exchange) {
 		TracingContext tracingContext = createTracingContext(exchange, "getCustomerById");
 		String traceId = tracingContext.getTraceId();
@@ -43,6 +45,7 @@ public class CustomerQueryController implements CustomerApi {
 	}
 
 	@Override
+	@TracedOperation("getCustomerByEmail")
 	public Mono<ResponseEntity<CustomerResponse>> getCustomerByEmail(String email, ServerWebExchange exchange) {
 		TracingContext tracingContext = createTracingContext(exchange, "getCustomerByEmail");
 		String traceId = tracingContext.getTraceId();
@@ -53,6 +56,7 @@ public class CustomerQueryController implements CustomerApi {
 	}
 
 	@Override
+	@TracedOperation("getCustomerByStatus")
 	public Mono<ResponseEntity<Page<CustomerSummary>>> getCustomerByStatus(String status, ServerWebExchange exchange,
 																		   int page, int size, String sortBy, String sortDir) {
 		TracingContext tracingContext = createTracingContext(exchange, "getCustomerByStatus");
@@ -68,6 +72,7 @@ public class CustomerQueryController implements CustomerApi {
 	}
 
 	@Override
+	@TracedOperation("getAllCustomers")
 	public Mono<ResponseEntity<Page<CustomerSummary>>> getAllCustomers(int page, int size, String sortBy, String sortDir, ServerWebExchange exchange) {
 		TracingContext tracingContext = createTracingContext(exchange, "getAllCustomers");
 		String traceId = tracingContext.getTraceId();
@@ -82,6 +87,7 @@ public class CustomerQueryController implements CustomerApi {
 	}
 
 	@Override
+	@TracedOperation("searchCustomers")
 	public Mono<ResponseEntity<Page<CustomerSummary>>> searchCustomers(String query, int page, int size, ServerWebExchange exchange) {
 		TracingContext tracingContext = createTracingContext(exchange, "searchCustomers");
 		String traceId = tracingContext.getTraceId();

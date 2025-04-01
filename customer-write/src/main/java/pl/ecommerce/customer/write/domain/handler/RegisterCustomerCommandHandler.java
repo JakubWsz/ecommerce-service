@@ -32,7 +32,7 @@ public class RegisterCustomerCommandHandler implements CommandHandler<RegisterCu
 				command.email(),
 				command.firstName(),
 				command.lastName(),
-				command.phoneNumber() != null ? command.phoneNumber() : null,
+				command.phoneNumber(),
 				Instant.now(),
 				0
 		));

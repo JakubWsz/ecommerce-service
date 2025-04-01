@@ -14,4 +14,8 @@ public record VerifyVendorCommand(
 		List<String> verifiedFields,
 		TracingContext tracingContext
 ) implements Command {
+	@Override
+	public UUID getId() {
+		return vendorId;
+	}
 }

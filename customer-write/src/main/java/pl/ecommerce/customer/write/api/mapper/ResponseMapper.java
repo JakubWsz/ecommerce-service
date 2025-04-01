@@ -10,10 +10,10 @@ public interface ResponseMapper {
 	static CustomerRegistrationResponse map(UUID customerId, CustomerRegistrationRequest request, String traceId) {
 		return new CustomerRegistrationResponse(
 				customerId,
+				traceId,
 				request.email(),
 				request.firstName(),
-				request.lastName(),
-				traceId
+				request.lastName()
 		);
 	}
 

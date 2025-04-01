@@ -10,9 +10,6 @@
 //import reactor.core.publisher.Hooks;
 //import jakarta.annotation.PostConstruct;
 //
-///**
-// * Configuration for distributed tracing in the read service
-// */
 //@Configuration
 //public class TracingConfig {
 //
@@ -21,17 +18,11 @@
 //		return new ObservedAspect(observationRegistry);
 //	}
 //
-//	/**
-//	 * Initialize reactor hooks for context propagation
-//	 */
 //	@PostConstruct
 //	public void init() {
 //		Hooks.enableContextPropagation();
 //	}
 //
-//	/**
-//	 * WebFilter for propagating trace context in web requests
-//	 */
 //	@Bean
 //	public WebFilter traceIdWebFilter(Tracer tracer, Propagator propagator) {
 //		return (exchange, chain) -> {

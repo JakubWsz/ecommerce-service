@@ -1,7 +1,6 @@
 package pl.ecommerce.commons.event.customer;
 
 import lombok.*;
-import pl.ecommerce.commons.event.DomainEvent;
 import pl.ecommerce.commons.event.Message;
 
 import java.time.Instant;
@@ -20,13 +19,13 @@ public class CustomerAddressUpdatedEvent extends CustomerEvent {
 	private String city;
 	private String postalCode;
 	private String country;
-	private String state;
+	private String voivodeship;
 	private boolean isDefault;
 
 	@Builder
 	public CustomerAddressUpdatedEvent(UUID customerId, UUID addressId, String buildingNumber, String apartmentNumber,
 									   String street, String city, String postalCode,
-									   String country, String state, boolean isDefault,
+									   String country, String voivodeship, boolean isDefault,
 									   Instant timestamp, int version) {
 		super(customerId, version, timestamp);
 		this.customerId = customerId;
@@ -37,7 +36,7 @@ public class CustomerAddressUpdatedEvent extends CustomerEvent {
 		this.city = city;
 		this.postalCode = postalCode;
 		this.country = country;
-		this.state = state;
+		this.voivodeship = voivodeship;
 		this.isDefault = isDefault;
 	}
 }

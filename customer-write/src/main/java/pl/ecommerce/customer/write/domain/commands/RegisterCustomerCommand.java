@@ -3,7 +3,6 @@ package pl.ecommerce.customer.write.domain.commands;
 import lombok.Builder;
 import pl.ecommerce.commons.command.Command;
 import pl.ecommerce.commons.model.customer.CustomerConsents;
-import pl.ecommerce.commons.tracing.TracingContext;
 
 import java.util.UUID;
 
@@ -14,6 +13,10 @@ public record RegisterCustomerCommand(UUID customerId,
 									  String lastName,
 									  String phoneNumber,
 									  String password,
-									  CustomerConsents consents,
-									  TracingContext tracingContext) implements Command {
+									  CustomerConsents consents
+									 ) implements Command {
+	@Override
+	public UUID getId() {
+		return customerId;
+	}
 }

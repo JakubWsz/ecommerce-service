@@ -33,7 +33,10 @@ public interface CustomerApi {
 	Mono<ResponseEntity<Page<CustomerSummary>>> getCustomerByStatus(
 			@PathVariable String status,
 			ServerWebExchange exchange,
-			int page, int size, String sortBy, String sortDir);
+			@RequestParam(defaultValue = "0") int page,
+			@RequestParam(defaultValue = "20") int size,
+			@RequestParam(defaultValue = "lastName") String sortBy,
+			@RequestParam(defaultValue = "asc") String sortDir);
 
 	@Operation(summary = "Get customers", description = "Returns all active customers with pagination")
 	@GetMapping

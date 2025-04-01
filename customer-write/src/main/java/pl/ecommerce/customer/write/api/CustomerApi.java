@@ -35,14 +35,14 @@ public interface CustomerApi {
 	@PutMapping("/{id}/email")
 	Mono<ResponseEntity<CustomerEmailChangeResponse>> changeEmail(
 			@PathVariable UUID id,
-			@RequestParam @NotBlank @Email @Schema(description = "New email address", example = "new.email@example.com") String newEmail,
+			@RequestParam @NotBlank @Email @Schema(description = "New email address") String newEmail,
 			ServerWebExchange exchange);
 
 	@Operation(summary = "Verify customer email", description = "Verifies a customer's email address")
 	@PostMapping("/{id}/email/verify")
 	Mono<ResponseEntity<CustomerVerificationResponse>> verifyEmail(
 			@PathVariable UUID id,
-			@RequestParam @NotBlank @Schema(description = "Verification token", example = "ABC123") String token,
+			@RequestParam @NotBlank @Schema(description = "Verification token") String token,
 			ServerWebExchange exchange);
 
 	@Operation(summary = "Delete customer", description = "Hard deletes a customer account")
@@ -55,7 +55,7 @@ public interface CustomerApi {
 	@PostMapping("/{id}/phone/verify")
 	Mono<ResponseEntity<CustomerPhoneVerificationResponse>> verifyPhoneNumber(
 			@PathVariable UUID id,
-			@RequestParam @NotBlank @Schema(description = "Verification token", example = "XYZ789") String verificationToken,
+			@RequestParam @NotBlank @Schema(description = "Verification token") String verificationToken,
 			ServerWebExchange exchange);
 
 	@Operation(summary = "Add shipping address", description = "Adds a new shipping address for a customer")
@@ -91,13 +91,13 @@ public interface CustomerApi {
 	@PostMapping("/{id}/deactivate")
 	Mono<ResponseEntity<CustomerDeactivationResponse>> deactivate(
 			@PathVariable UUID id,
-			@RequestParam @NotBlank @Schema(description = "Reason for deactivation", example = "User requested deactivation") String reason,
+			@RequestParam @NotBlank @Schema(description = "Reason for deactivation") String reason,
 			ServerWebExchange exchange);
 
 	@Operation(summary = "Reactivate customer", description = "Reactivates a customer's account")
 	@PostMapping("/{id}/reactivate")
 	Mono<ResponseEntity<CustomerReactivationResponse>> reactivate(
 			@PathVariable UUID id,
-			@RequestParam @NotBlank @Schema(description = "Note regarding reactivation", example = "Customer reactivated after manual review") String note,
+			@RequestParam @NotBlank @Schema(description = "Note regarding reactivation") String note,
 			ServerWebExchange exchange);
 }

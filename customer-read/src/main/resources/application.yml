@@ -92,6 +92,22 @@ springdoc:
   api-docs:
     enabled: true
 
+# Kafka DLQ configuration
+kafka:
+  dlq:
+    enabled: true
+    retry-attempts: 3
+    initial-interval-ms: 1000
+    multiplier: 2.0
+    max-interval-ms: 60000
+    retry-interval-ms: 60000
+    topics: customer.registered.event.DLT,customer.updated.event.DLT,customer.email-changed.event.DLT,customer.email-verified.event.DLT,customer.phone-verified.event.DLT,customer.address-added.event.DLT,customer.address-updated.event.DLT,customer.address-removed.event.DLT,customer.preferences-updated.event.DLT,customer.deactivated.event.DLT,customer.reactivated.event.DLT,customer.deleted.event.DLT
+
+# OpenTelemetry configuration
+opentelemetry:
+  otlp:
+    endpoint: http://otel-collector:4317
+
 ---
 # Profile: dev
 spring:
@@ -118,6 +134,7 @@ logging:
 
 server:
   port: 8082
+
 ---
 # Profile: prod
 spring:
@@ -133,8 +150,8 @@ spring:
 
   # Kafka configuration for production
   kafka:
-    bootstrap-servers: ${KAFKA_SERVERS:kafka:9092}
-    schema-registry-url: ${SCHEMA_REGISTRY_URL:http://schema-registry:8081}
+    bootstrap-servers: localhost:29092
+    schema-registry-url: http://localhost:8081
 
 # Logging configuration for production
 logging:

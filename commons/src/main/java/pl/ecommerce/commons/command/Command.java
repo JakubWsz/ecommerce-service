@@ -1,7 +1,7 @@
 package pl.ecommerce.commons.command;
 
-import pl.ecommerce.commons.tracing.TracingContext;
+import java.util.UUID;
 
 public interface Command {
-	TracingContext tracingContext();
+	UUID getId();
 }
