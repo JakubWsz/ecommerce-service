@@ -40,30 +40,4 @@ public class MongoConfig {
 			return source.toString();
 		}
 	}
-
-//	private static class StringToUuidConverter implements org.springframework.core.convert.converter.Converter<String, UUID> {
-//		@Override
-//		public UUID convert(String source) {
-//			return UUID.fromString(source);
-//		}
-//	}
-
-//	private static class StringToUuidConverter implements org.springframework.core.convert.converter.Converter<String, UUID> {
-//		@Override
-//		public UUID convert(String source) {
-//			try {
-//				return UUID.fromString(source);
-//			} catch (IllegalArgumentException e) {
-//				// Log error or handle it as required
-//				System.err.println("Invalid UUID string: " + source);
-//				return null;  // Or consider a default UUID if applicable
-//			}
-//		}
-//	}
-
-//	@Bean
-//	public MappingMongoConverter customizeMongoMappingConverter(MappingMongoConverter converter) {
-//		converter.setTypeMapper(new DefaultMongoTypeMapper(null));
-//		return converter;
-//	}
 }

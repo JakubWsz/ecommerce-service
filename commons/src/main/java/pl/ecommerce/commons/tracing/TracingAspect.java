@@ -37,7 +37,6 @@ public class TracingAspect {
 		TracingContext tracingContext = createTracingContext(exchange, tracedOperation.value());
 		String traceId = tracingContext.getTraceId();
 
-		// Dodaj traceId do MDC
 		MDC.put("traceId", traceId);
 
 		log.info("Executing operation: {} with traceId: {}", tracedOperation.value(), traceId);

@@ -3,7 +3,7 @@
 
     <springProperty name="appName" source="spring.application.name" defaultValue="unknown"/>
     <springProperty name="env" source="spring.profiles.active" defaultValue="default"/>
-    <springProperty name="logstashHost" source="LOGSTASH_HOST" defaultValue="host.docker.internal"/>
+    <springProperty name="logstashHost" source="LOGSTASH_HOST" defaultValue="localhost"/>
     <springProperty name="logstashPort" source="LOGSTASH_PORT" defaultValue="5000"/>
 
     <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
@@ -27,9 +27,20 @@
 
     <appender name="LOGSTASH" class="net.logstash.logback.appender.LogstashTcpSocketAppender">
         <destination>${logstashHost}:${logstashPort}</destination>
-        <encoder class="net.logstash.logback.encoder.LogstashEncoder">
-            <includeMdc>true</includeMdc>
-            <customFields>{"application":"${appName}","environment":"${env}"}</customFields>
+        <encoder class="net.logstash.logback.encoder.LoggingEventCompositeJsonEncoder">
+            <providers>
+                <timestamp>
+                    <timeZone>UTC</timeZone>
+                </timestamp>
+                <loggerName />
+                <threadName />
+                <logLevel />
+                <message />
+                <logstashMarkers />
+                <context />
+                <mdc />
+                <stackTrace />
+            </providers>
         </encoder>
     </appender>
 

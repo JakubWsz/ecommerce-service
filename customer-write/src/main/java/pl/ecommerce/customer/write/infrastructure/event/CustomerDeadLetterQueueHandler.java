@@ -87,10 +87,6 @@ public class CustomerDeadLetterQueueHandler extends DeadLetterQueueHandler {
 							DlqMessageStatus.RETRY_IN_PROGRESS,
 							"Retry attempt in progress");
 
-					// Logic to retry the message
-					// ...
-
-					// If successful
 					dlqRepository.updateMessageStatus(
 							messageId,
 							DlqMessageStatus.RETRY_SUCCEEDED,

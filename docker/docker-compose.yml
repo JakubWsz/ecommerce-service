@@ -337,6 +337,7 @@ services:
     depends_on:
       elasticsearch:
         condition: service_healthy
+    command: ["sh", "-c", "chmod go-w /usr/share/filebeat/filebeat.yml && filebeat -e"]
 
   # Prometheus
   prometheus:

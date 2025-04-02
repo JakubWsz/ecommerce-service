@@ -1,17 +1,17 @@
 filebeat.inputs:
-  - type: container
+  - type: log
+    enabled: true
     paths:
-      - '/var/lib/docker/containers/*/*.log'
+      - /logs/*.json
     json.keys_under_root: true
-    json.message_key: log
+    json.message_key: message
 
 processors:
   - add_docker_metadata: ~
   - add_host_metadata: ~
 
-output.elasticsearch:
-  hosts: ["elasticsearch:9200"]
-  index: "filebeat-%{+yyyy.MM.dd}"
+output.logstash:
+  hosts: ["logstash:5000"]
 
 setup.kibana:
   host: "kibana:5601"

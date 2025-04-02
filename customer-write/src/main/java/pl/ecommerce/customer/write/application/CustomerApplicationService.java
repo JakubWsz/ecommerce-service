@@ -31,7 +31,6 @@ public class CustomerApplicationService {
 
 	public Mono<UUID> registerCustomer(RegisterCustomerCommand command) {
 		return Mono.deferContextual(contextView -> {
-			// W nowych wersjach Reactora używamy ContextView
 			TracingContext tracingContext = contextView.getOrDefault(CONTEXT_KEY, null);
 			String traceId = tracingContext != null ? tracingContext.getTraceId() : "unknown";
 

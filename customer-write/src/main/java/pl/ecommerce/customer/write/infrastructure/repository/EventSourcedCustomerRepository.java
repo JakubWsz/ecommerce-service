@@ -40,7 +40,6 @@ public class EventSourcedCustomerRepository implements CustomerRepository {
 		}
 
 		return Mono.deferContextual(contextView -> {
-			// Pobierz TracingContext z kontekstu Reactora
 			TracingContext tracingContext = TracingContextHolder.getFromContext(contextView);
 
 			if (Objects.nonNull(tracingContext)) {
