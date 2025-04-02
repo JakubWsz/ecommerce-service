@@ -2,6 +2,8 @@ package pl.ecommerce.customer.read.infrastructure.projector;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.env.Environment;
 import org.springframework.data.mongodb.core.ReactiveMongoTemplate;
 import org.springframework.data.mongodb.core.query.Criteria;
 import org.springframework.data.mongodb.core.query.Query;
@@ -28,8 +30,8 @@ public class CustomerEventProjector extends DomainEventHandler {
 	private final CustomerReadRepository customerRepository;
 
 	public CustomerEventProjector(ReactiveMongoTemplate mongoTemplate, CustomerReadRepository customerRepository,
-								  ObjectMapper objectMapper, TopicsProvider topicsProvider) {
-		super(objectMapper, topicsProvider);
+								  ObjectMapper objectMapper, TopicsProvider topicsProvider, Environment environment) {
+		super(objectMapper, topicsProvider,environment.getProperty("spring.application.name"));
 		this.mongoTemplate = mongoTemplate;
 		this.customerRepository = customerRepository;
 	}

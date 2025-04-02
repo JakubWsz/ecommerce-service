@@ -1,6 +1,10 @@
 package pl.ecommerce.commons.kafka;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.opentelemetry.api.GlobalOpenTelemetry;
+import io.opentelemetry.api.trace.*;
+import io.opentelemetry.context.Context;
+import io.opentelemetry.context.Scope;
 import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -27,6 +31,7 @@ public abstract class DomainEventHandler {
 
 	protected final ObjectMapper objectMapper;
 	protected final TopicsProvider topicsProvider;
+	protected final String applicationName;
 
 	@Autowired(required = false)
 	private DlqMetrics dlqMetrics;
@@ -79,16 +84,35 @@ public abstract class DomainEventHandler {
 	)
 	public void consume(ConsumerRecord<String, Object> record, Acknowledgment ack) {
 		String traceId = "unknown";
+		String spanId = "0000000000000000";
+
 		for (Header header : record.headers()) {
 			if ("trace-id".equals(header.key())) {
 				traceId = new String(header.value(), StandardCharsets.UTF_8);
-				break;
+			} else if ("span-id".equals(header.key())) {
+				spanId = new String(header.value(), StandardCharsets.UTF_8);
 			}
 		}
 
 		MDC.put("traceId", traceId);
 
-		try {
+		SpanContext parentContext = SpanContext.createFromRemoteParent(
+				traceId,
+				spanId,
+				TraceFlags.getSampled(),
+				TraceState.getDefault()
+		);
+
+		Span parentSpan = Span.wrap(parentContext);
+		Context contextWithParent = Context.root().with(parentSpan);
+
+		Span span = GlobalOpenTelemetry.getTracer(applicationName)
+				.spanBuilder("processKafkaEvent")
+				.setParent(contextWithParent)
+				.setSpanKind(SpanKind.CONSUMER)
+				.startSpan();
+
+		try (Scope scope = span.makeCurrent()) {
 			Object value = record.value();
 
 			if (!(value instanceof DomainEvent event)) {
@@ -99,18 +123,11 @@ public abstract class DomainEventHandler {
 
 			setTracingContextFromHeaders(record, event);
 
-			String eventType = event.getClass().getSimpleName();
-			String key = record.key();
-			UUID aggregateId = event.getAggregateId();
-
-			log.info("Received event: {} with key: {}, aggregateId: {}, traceId: {}",
-					eventType, key, aggregateId, traceId);
-
 			Map<String, String> headers = extractHeaders(record);
 
 			boolean processed = processEvent(event, headers);
 			if (!processed) {
-				log.info("No handler found for event type: {}, traceId: {}", eventType, traceId);
+				log.info("No handler found for event type: {}, traceId: {}", event.getClass().getSimpleName(), traceId);
 			}
 
 			ack.acknowledge();
@@ -118,6 +135,7 @@ public abstract class DomainEventHandler {
 			log.error("Error processing Kafka message, traceId: {}: {}", traceId, e.getMessage(), e);
 			ack.acknowledge();
 		} finally {
+			span.end();
 			MDC.remove("traceId");
 		}
 	}
