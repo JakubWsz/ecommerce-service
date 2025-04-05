@@ -6,10 +6,15 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
+import io.opentelemetry.api.trace.Span;
+import io.opentelemetry.api.trace.SpanContext;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+
+import static java.util.Objects.nonNull;
+import static java.util.Objects.isNull;
 
 @Slf4j
 @Data
@@ -33,19 +38,51 @@ public class TracingContext {
 	@Builder
 	public TracingContext(String traceId, String spanId, Instant timestamp,
 						  String userId, String sourceService, String sourceOperation) {
-		this.traceId = traceId != null ? traceId : UUID.randomUUID().toString();
-		this.spanId = spanId != null ? spanId : UUID.randomUUID().toString();
-		this.timestamp = timestamp != null ? timestamp : Instant.now();
+		Span currentSpan = Span.current();
+
+		if (nonNull(currentSpan) && currentSpan.getSpanContext().isValid()) {
+			this.traceId = currentSpan.getSpanContext().getTraceId();
+			this.spanId = currentSpan.getSpanContext().getSpanId();
+		} else {
+			this.traceId = (nonNull(traceId) && traceId.length() == 32)
+					? traceId
+					: generateTraceId();
+
+			this.spanId = (nonNull(spanId) && spanId.length() == 16)
+					? spanId
+					: generateSpanId();
+		}
+
+		this.timestamp = (nonNull(timestamp)) ? timestamp : Instant.now();
 		this.userId = userId;
 		this.sourceService = sourceService;
 		this.sourceOperation = sourceOperation;
 		this.additionalData = new ConcurrentHashMap<>();
 	}
 
+	public static String generateTraceId() {
+		Span currentSpan = Span.current();
+		if (nonNull(currentSpan) && currentSpan.getSpanContext().isValid()) {
+			return currentSpan.getSpanContext().getTraceId();
+		}
+
+		return UUID.randomUUID().toString().replace("-", "") +
+				UUID.randomUUID().toString().replace("-", "").substring(0, 16);
+	}
+
+	public static String generateSpanId() {
+		Span currentSpan = Span.current();
+		if (nonNull(currentSpan) && currentSpan.getSpanContext().isValid()) {
+			return currentSpan.getSpanContext().getSpanId();
+		}
+
+		return UUID.randomUUID().toString().replace("-", "").substring(0, 16);
+	}
+
 	public TracingContext createChildContext(String operation) {
 		return TracingContext.builder()
 				.traceId(this.traceId)
-				.spanId(UUID.randomUUID().toString())
+				.spanId(generateSpanId())
 				.timestamp(Instant.now())
 				.userId(this.userId)
 				.sourceService(this.sourceService)
@@ -59,13 +96,37 @@ public class TracingContext {
 	}
 
 	public static TracingContext createNew(String serviceId, String operation, String userId) {
+		Span currentSpan = Span.current();
+		if (nonNull(currentSpan) && currentSpan.getSpanContext().isValid()) {
+			SpanContext spanContext = currentSpan.getSpanContext();
+			return TracingContext.builder()
+					.traceId(spanContext.getTraceId())
+					.spanId(spanContext.getSpanId())
+					.timestamp(Instant.now())
+					.userId(userId)
+					.sourceService(serviceId)
+					.sourceOperation(operation)
+					.build();
+		}
+
 		return TracingContext.builder()
-				.traceId(UUID.randomUUID().toString())
-				.spanId(UUID.randomUUID().toString())
+				.traceId(generateTraceId())
+				.spanId(generateSpanId())
 				.timestamp(Instant.now())
 				.userId(userId)
 				.sourceService(serviceId)
 				.sourceOperation(operation)
+				.build();
+	}
+
+	public static TracingContext createNew() {
+		return TracingContext.builder()
+				.traceId(generateTraceId())
+				.spanId(generateSpanId())
+				.timestamp(Instant.now())
+				.userId(null)
+				.sourceService("unknown")
+				.sourceOperation("unknown")
 				.build();
 	}
 
@@ -75,13 +136,13 @@ public class TracingContext {
 		headers.put(SPAN_ID_HEADER, spanId);
 		headers.put(TIMESTAMP_HEADER, timestamp.toString());
 
-		if (userId != null) {
+		if (nonNull(userId)) {
 			headers.put(USER_ID_HEADER, userId);
 		}
-		if (sourceService != null) {
+		if (nonNull(sourceService)) {
 			headers.put(SOURCE_SERVICE_HEADER, sourceService);
 		}
-		if (sourceOperation != null) {
+		if (nonNull(sourceOperation)) {
 			headers.put(SOURCE_OPERATION_HEADER, sourceOperation);
 		}
 
@@ -89,7 +150,7 @@ public class TracingContext {
 	}
 
 	public static TracingContext fromHeadersMap(Map<String, String> headers) {
-		if (headers == null || headers.isEmpty()) {
+		if (isNull(headers) || headers.isEmpty()) {
 			return createNew("unknown", "unknown", null);
 		}
 
@@ -101,7 +162,7 @@ public class TracingContext {
 
 		Instant timestamp = null;
 		String timestampStr = headers.get(TIMESTAMP_HEADER);
-		if (timestampStr != null) {
+		if (nonNull(timestampStr)) {
 			try {
 				timestamp = Instant.parse(timestampStr);
 			} catch (Exception e) {

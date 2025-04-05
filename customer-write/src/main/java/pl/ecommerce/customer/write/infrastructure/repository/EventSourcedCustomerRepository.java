@@ -98,12 +98,9 @@ public class EventSourcedCustomerRepository implements CustomerRepository {
 	}
 
 	private void ensureTracingContext(List<DomainEvent> events) {
-		TracingContext currentContext = TracingContextHolder.getContext();
-		if (nonNull(currentContext)) {
-			for (DomainEvent event : events) {
-				if (isNull(event.getTracingContext())) {
-					event.setTracingContext(currentContext);
-				}
+		for (DomainEvent event : events) {
+			if (event.getTracingContext() == null) {
+				event.setTracingContext(TracingContext.createNew());
 			}
 		}
 	}

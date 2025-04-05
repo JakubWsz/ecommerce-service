@@ -5,11 +5,13 @@ import io.opentelemetry.api.GlobalOpenTelemetry;
 import io.opentelemetry.api.trace.*;
 import io.opentelemetry.context.Context;
 import io.opentelemetry.context.Scope;
+import io.opentelemetry.context.propagation.TextMapGetter;
 import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.common.header.Header;
+import org.apache.kafka.common.header.Headers;
 import org.slf4j.MDC;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.kafka.annotation.KafkaListener;
@@ -23,7 +25,9 @@ import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
-import java.util.UUID;
+
+import static java.util.Objects.isNull;
+import static java.util.Objects.nonNull;
 
 @Slf4j
 @RequiredArgsConstructor
@@ -37,6 +41,24 @@ public abstract class DomainEventHandler {
 	private DlqMetrics dlqMetrics;
 
 	private final Map<Class<? extends DomainEvent>, Method> handlerMethods = new HashMap<>();
+
+	private static final TextMapGetter<Headers> GETTER = new TextMapGetter<>() {
+		@Override
+		public Iterable<String> keys(Headers carrier) {
+			Map<String, String> headerMap = new HashMap<>();
+			for (Header header : carrier) {
+				headerMap.put(header.key(), "");
+			}
+			return headerMap.keySet();
+		}
+
+		@Override
+		public String get(Headers carrier, String key) {
+			Header header = nonNull(carrier) ? carrier.lastHeader(key) : null;
+			return nonNull(header) ? new String(header.value(), StandardCharsets.UTF_8) : null;
+		}
+
+	};
 
 	@PostConstruct
 	public void init() {
@@ -61,7 +83,7 @@ public abstract class DomainEventHandler {
 
 	public boolean processEvent(DomainEvent event, Map<String, String> headers) {
 		Method handler = handlerMethods.get(event.getClass());
-		if (handler != null) {
+		if (nonNull(handler)) {
 			try {
 				if (handler.getParameterCount() == 1) {
 					handler.invoke(this, event);
@@ -86,31 +108,51 @@ public abstract class DomainEventHandler {
 		String traceId = "unknown";
 		String spanId = "0000000000000000";
 
-		for (Header header : record.headers()) {
-			if ("trace-id".equals(header.key())) {
-				traceId = new String(header.value(), StandardCharsets.UTF_8);
-			} else if ("span-id".equals(header.key())) {
-				spanId = new String(header.value(), StandardCharsets.UTF_8);
+		Context extractedContext = GlobalOpenTelemetry.getPropagators()
+				.getTextMapPropagator()
+				.extract(Context.current(), record.headers(), GETTER);
+
+		Span span;
+		Span parentSpan = null;
+		SpanContext extractedSpanContext = Span.fromContext(extractedContext).getSpanContext();
+
+		if (extractedSpanContext.isValid()) {
+			traceId = extractedSpanContext.getTraceId();
+			spanId = extractedSpanContext.getSpanId();
+
+			parentSpan = Span.fromContext(extractedContext);
+		} else {
+			for (Header header : record.headers()) {
+				if ("trace-id".equals(header.key())) {
+					traceId = new String(header.value(), StandardCharsets.UTF_8);
+				} else if ("span-id".equals(header.key())) {
+					spanId = new String(header.value(), StandardCharsets.UTF_8);
+				}
 			}
+
+			SpanContext parentContext = SpanContext.createFromRemoteParent(
+					traceId,
+					spanId,
+					TraceFlags.getSampled(),
+					TraceState.getDefault()
+			);
+
+			parentSpan = Span.wrap(parentContext);
 		}
 
 		MDC.put("traceId", traceId);
 
-		SpanContext parentContext = SpanContext.createFromRemoteParent(
-				traceId,
-				spanId,
-				TraceFlags.getSampled(),
-				TraceState.getDefault()
-		);
+		Context contextWithParent = Context.current().with(parentSpan);
 
-		Span parentSpan = Span.wrap(parentContext);
-		Context contextWithParent = Context.root().with(parentSpan);
-
-		Span span = GlobalOpenTelemetry.getTracer(applicationName)
+		SpanBuilder spanBuilder = GlobalOpenTelemetry.getTracer(applicationName)
 				.spanBuilder("processKafkaEvent")
-				.setParent(contextWithParent)
-				.setSpanKind(SpanKind.CONSUMER)
-				.startSpan();
+				.setSpanKind(SpanKind.CONSUMER);
+
+		if (nonNull(parentSpan)) {
+			spanBuilder.setParent(contextWithParent);
+		}
+
+		span = spanBuilder.startSpan();
 
 		try (Scope scope = span.makeCurrent()) {
 			Object value = record.value();
@@ -147,27 +189,39 @@ public abstract class DomainEventHandler {
 		String sourceService = null;
 		String sourceOperation = null;
 
-		for (Header header : record.headers()) {
-			switch (header.key()) {
-				case "trace-id":
-					traceId = new String(header.value(), StandardCharsets.UTF_8);
-					break;
-				case "span-id":
-					spanId = new String(header.value(), StandardCharsets.UTF_8);
-					break;
-				case "user-id":
-					userId = new String(header.value(), StandardCharsets.UTF_8);
-					break;
-				case "source-service":
-					sourceService = new String(header.value(), StandardCharsets.UTF_8);
-					break;
-				case "source-operation":
-					sourceOperation = new String(header.value(), StandardCharsets.UTF_8);
-					break;
+		Context extractedContext = GlobalOpenTelemetry.getPropagators()
+				.getTextMapPropagator()
+				.extract(Context.current(), record.headers(), GETTER);
+		SpanContext extractedSpanContext = Span.fromContext(extractedContext).getSpanContext();
+
+		if (extractedSpanContext.isValid()) {
+			traceId = extractedSpanContext.getTraceId();
+			spanId = extractedSpanContext.getSpanId();
+		}
+
+		if (isNull(traceId)) {
+			for (Header header : record.headers()) {
+				switch (header.key()) {
+					case "trace-id":
+						traceId = new String(header.value(), StandardCharsets.UTF_8);
+						break;
+					case "span-id":
+						spanId = new String(header.value(), StandardCharsets.UTF_8);
+						break;
+					case "user-id":
+						userId = new String(header.value(), StandardCharsets.UTF_8);
+						break;
+					case "source-service":
+						sourceService = new String(header.value(), StandardCharsets.UTF_8);
+						break;
+					case "source-operation":
+						sourceOperation = new String(header.value(), StandardCharsets.UTF_8);
+						break;
+				}
 			}
 		}
 
-		if (traceId != null) {
+		if (nonNull(traceId)) {
 			TracingContext tracingContext = TracingContext.builder()
 					.traceId(traceId)
 					.spanId(spanId)
@@ -184,7 +238,7 @@ public abstract class DomainEventHandler {
 		Map<String, String> result = new HashMap<>();
 
 		for (Header header : record.headers()) {
-			if (Objects.nonNull(header.key()) && Objects.nonNull(header.value())) {
+			if (nonNull(header.key()) && nonNull(header.value())) {
 				String headerValue = new String(header.value(), StandardCharsets.UTF_8);
 				result.put(header.key(), headerValue);
 			}

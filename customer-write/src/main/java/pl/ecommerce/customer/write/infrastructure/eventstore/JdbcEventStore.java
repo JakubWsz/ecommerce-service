@@ -21,6 +21,8 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.Objects;
 
+import static java.util.Objects.isNull;
+
 @Component
 @RequiredArgsConstructor
 @Slf4j
@@ -40,13 +42,9 @@ public class JdbcEventStore implements EventStore {
 		}
 
 		for (DomainEvent event : events) {
-			if (Objects.isNull(event.getTracingContext())) {
-				TracingContext tracingContext = TracingContextHolder.getContext();
-				if (Objects.nonNull(tracingContext)) {
-					event.setTracingContext(tracingContext);
-				}
+			if (isNull(event.getTracingContext())) {
+				event.setTracingContext(TracingContext.createNew("unknown", "unknown", null));
 			}
-
 			currentVersion = saveSingleEvent(aggregateId, currentVersion, event);
 		}
 	}

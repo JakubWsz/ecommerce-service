@@ -16,7 +16,16 @@ import pl.ecommerce.commons.tracing.TracingContextHolder;
 import reactor.core.publisher.Mono;
 import reactor.util.context.ContextView;
 
+import io.opentelemetry.api.GlobalOpenTelemetry;
+import io.opentelemetry.api.trace.Span;
+import io.opentelemetry.api.trace.SpanContext;
+import io.opentelemetry.context.Context;
+import io.opentelemetry.context.propagation.TextMapPropagator;
+import io.opentelemetry.context.propagation.TextMapSetter;
+
 import java.nio.charset.StandardCharsets;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 
 import static java.util.Objects.isNull;
@@ -29,6 +38,13 @@ public class EventPublisher {
 	public static final String CONTEXT_KEY = "TRACING_CONTEXT";
 	private final KafkaTemplate<String, String> kafkaTemplate;
 	private final ObjectMapper objectMapper;
+
+	private static final TextMapSetter<ProducerRecord<String, String>> SETTER =
+			(carrier, key, value) -> {
+				if (nonNull(carrier) && nonNull(key) && nonNull(value)) {
+					carrier.headers().add(new RecordHeader(key, value.getBytes(StandardCharsets.UTF_8)));
+				}
+			};
 
 	public Mono<Void> publish(DomainEvent event) {
 		return publish(event, null, null);
@@ -67,18 +83,18 @@ public class EventPublisher {
 
 				addTracingHeaders(record, event);
 
+				injectOpenTelemetryContext(record, tracingContext);
+
 				if (nonNull(className) && !className.isEmpty()) {
 					record.headers().add(new RecordHeader("__TypeId__",
 							className.getBytes(StandardCharsets.UTF_8)));
 				}
 
 				String traceId = getTraceId(event, contextView);
-				record.headers().add(new RecordHeader("trace-id",
-						traceId.getBytes(StandardCharsets.UTF_8)));
-
 				log.debug("Publishing event {} to topic {} with traceId {}",
 						eventType, topic, traceId);
 
+				kafkaTemplate.setObservationEnabled(true);
 				CompletableFuture<SendResult<String, String>> future = kafkaTemplate.send(record).toCompletableFuture();
 
 				return Mono.fromFuture(future)
@@ -96,6 +112,31 @@ public class EventPublisher {
 				return Mono.error(e);
 			}
 		});
+	}
+
+	private void injectOpenTelemetryContext(ProducerRecord<String, String> record, TracingContext tracingContext) {
+		if (nonNull(tracingContext)) {
+			Context currentContext = Context.current();
+
+			Span currentSpan = Span.current();
+			if (nonNull(currentSpan) && currentSpan.getSpanContext().isValid()) {
+				GlobalOpenTelemetry.getPropagators()
+						.getTextMapPropagator()
+						.inject(currentContext, record, SETTER);
+			} else {
+				SpanContext spanContext = SpanContext.createFromRemoteParent(
+						tracingContext.getTraceId(),
+						tracingContext.getSpanId(),
+						io.opentelemetry.api.trace.TraceFlags.getSampled(),
+						io.opentelemetry.api.trace.TraceState.getDefault()
+				);
+
+				Context syntheticContext = currentContext.with(io.opentelemetry.api.trace.Span.wrap(spanContext));
+				GlobalOpenTelemetry.getPropagators()
+						.getTextMapPropagator()
+						.inject(syntheticContext, record, SETTER);
+			}
+		}
 	}
 
 	private void addTracingHeaders(ProducerRecord<String, String> record, DomainEvent event) {
@@ -131,26 +172,22 @@ public class EventPublisher {
 			return event.getTracingContext();
 		}
 
-		try {
-			TracingContext fromReactor = contextView.getOrDefault(CONTEXT_KEY, null);
-			if (nonNull(fromReactor)) {
-				return fromReactor;
-			}
-		} catch (Exception e) {
-			log.debug("No tracing context in Reactor context", e);
+		TracingContext fromReactor = contextView.getOrDefault(TracingContextHolder.CONTEXT_KEY, null);
+		if (nonNull(fromReactor)) {
+			return fromReactor;
 		}
 
-		return TracingContextHolder.getContext();
+		return TracingContext.createNew("unknown", "unknown", null);
 	}
 
+
 	private String getTraceId(DomainEvent event, ContextView contextView) {
-		if (nonNull(event.getTracingContext()) &&
-				nonNull(event.getTracingContext().getTraceId())) {
+		if (nonNull(event.getTracingContext()) && nonNull(event.getTracingContext().getTraceId())) {
 			return event.getTracingContext().getTraceId();
 		}
 
 		try {
-			TracingContext fromReactor = contextView.getOrDefault(CONTEXT_KEY, null);
+			TracingContext fromReactor = contextView.getOrDefault(TracingContextHolder.CONTEXT_KEY, null);
 			if (nonNull(fromReactor) && nonNull(fromReactor.getTraceId())) {
 				return fromReactor.getTraceId();
 			}
@@ -158,11 +195,6 @@ public class EventPublisher {
 			log.debug("Error getting traceId from Reactor context", e);
 		}
 
-		TracingContext context = TracingContextHolder.getContext();
-		if (nonNull(context) && nonNull(context.getTraceId())) {
-			return context.getTraceId();
-		}
-
-		return "unknown";
+		return TracingContext.createNew("unknown", "unknown", null).getTraceId();
 	}
 }

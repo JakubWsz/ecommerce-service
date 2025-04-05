@@ -7,6 +7,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.bind.support.WebExchangeBindException;
+import pl.ecommerce.commons.tracing.TracingContext;
 import pl.ecommerce.commons.tracing.TracingContextHolder;
 
 import java.time.LocalDateTime;
@@ -205,10 +206,9 @@ public class GlobalExceptionHandler {
 
 	private String getCurrentTraceId() {
 		String traceId = MDC.get("traceId");
-
-		if (isNull(traceId)) {
-				traceId = TracingContextHolder.getTraceId();
+		if (traceId == null) {
+			traceId = TracingContext.createNew().getTraceId();
 		}
-		return nonNull(traceId) ? traceId : "unknown";
+		return traceId != null ? traceId : "unknown";
 	}
 }
