@@ -2,14 +2,12 @@ package pl.ecommerce.customer.read.infrastructure.projector;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.env.Environment;
 import org.springframework.data.mongodb.core.ReactiveMongoTemplate;
 import org.springframework.data.mongodb.core.query.Criteria;
 import org.springframework.data.mongodb.core.query.Query;
 import org.springframework.data.mongodb.core.query.Update;
 import org.springframework.stereotype.Component;
-import pl.ecommerce.commons.model.customer.Address;
 import pl.ecommerce.commons.model.customer.CustomerStatus;
 import pl.ecommerce.commons.event.customer.*;
 import pl.ecommerce.commons.kafka.DomainEventHandler;
@@ -17,6 +15,7 @@ import pl.ecommerce.commons.kafka.EventHandler;
 import pl.ecommerce.commons.kafka.TopicsProvider;
 import pl.ecommerce.customer.read.domain.model.CustomerReadModel;
 import pl.ecommerce.customer.read.infrastructure.repository.CustomerReadRepository;
+import pl.ecommerce.commons.tracing.TraceService;
 
 import java.time.Instant;
 
@@ -28,21 +27,27 @@ public class CustomerEventProjector extends DomainEventHandler {
 
 	private final ReactiveMongoTemplate mongoTemplate;
 	private final CustomerReadRepository customerRepository;
+	private final TraceService traceService;
 
-	public CustomerEventProjector(ReactiveMongoTemplate mongoTemplate, CustomerReadRepository customerRepository,
-								  ObjectMapper objectMapper, TopicsProvider topicsProvider, Environment environment) {
-		super(objectMapper, topicsProvider,environment.getProperty("spring.application.name"));
+	public CustomerEventProjector(ReactiveMongoTemplate mongoTemplate,
+								  CustomerReadRepository customerRepository,
+								  ObjectMapper objectMapper,
+								  TopicsProvider topicsProvider,
+								  Environment environment,
+								  TraceService traceService, TraceService traceService1) {
+		super(objectMapper, topicsProvider, environment.getProperty("spring.application.name"), traceService);
 		this.mongoTemplate = mongoTemplate;
 		this.customerRepository = customerRepository;
+		this.traceService = traceService1;
 	}
 
 	@EventHandler
 	public void on(CustomerRegisteredEvent event) {
-		String traceId = event.extractTraceId();
+		String traceId = traceService.getCurrentTraceId();
 		log.info("Projecting CustomerRegisteredEvent for customer: {}, traceId: {}",
 				event.getAggregateId(), traceId);
 
-		CustomerReadModel customer = buildCustomerReadModel(event, traceId);
+		CustomerReadModel customer = buildCustomerReadModel(event, traceId, traceService.getCurrentSpanId());
 		customerRepository.save(customer)
 				.doOnSuccess(saved -> log.debug("Customer read model saved successfully: {}, traceId: {}",
 						saved.getId(), traceId))
@@ -53,12 +58,12 @@ public class CustomerEventProjector extends DomainEventHandler {
 
 	@EventHandler
 	public void on(CustomerUpdatedEvent event) {
-		String traceId = event.extractTraceId();
+		String traceId = traceService.getCurrentTraceId();
 		log.info("Projecting CustomerUpdatedEvent for customer: {}, traceId: {}",
 				event.getAggregateId(), traceId);
 
 		Query query = Query.query(Criteria.where("_id").is(event.getAggregateId()));
-		Update update = buildUpdateForEvent(event, traceId);
+		Update update = buildUpdateForEvent(event, traceId, traceService.getCurrentSpanId());
 
 		mongoTemplate.updateFirst(query, update, CustomerReadModel.class)
 				.doOnSuccess(result -> log.debug("Updated customer read model: {}, modified: {}, traceId: {}",
@@ -70,12 +75,12 @@ public class CustomerEventProjector extends DomainEventHandler {
 
 	@EventHandler
 	public void on(CustomerEmailChangedEvent event) {
-		String traceId = event.extractTraceId();
+		String traceId = traceService.getCurrentTraceId();
 		log.info("Projecting CustomerEmailChangedEvent for customer: {}, traceId: {}",
 				event.getAggregateId(), traceId);
 
 		Query query = Query.query(Criteria.where("_id").is(event.getAggregateId()));
-		Update update = buildEmailChangeUpdate(event, traceId);
+		Update update = buildEmailChangeUpdate(event, traceId, traceService.getCurrentSpanId());
 
 		mongoTemplate.updateFirst(query, update, CustomerReadModel.class)
 				.doOnSuccess(result -> log.debug("Updated customer email in read model: {}, traceId: {}",
@@ -87,12 +92,12 @@ public class CustomerEventProjector extends DomainEventHandler {
 
 	@EventHandler
 	public void on(CustomerEmailVerifiedEvent event) {
-		String traceId = event.extractTraceId();
+		String traceId = traceService.getCurrentTraceId();
 		log.info("Projecting CustomerEmailVerifiedEvent for customer: {}, traceId: {}",
 				event.getAggregateId(), traceId);
 
 		Query query = Query.query(Criteria.where("_id").is(event.getAggregateId()));
-		Update update = buildEmailVerifiedUpdate(event, traceId);
+		Update update = buildEmailVerifiedUpdate(event, traceId, traceService.getCurrentSpanId());
 
 		mongoTemplate.updateFirst(query, update, CustomerReadModel.class)
 				.doOnSuccess(result -> log.debug("Updated customer email verification in read model: {}, traceId: {}",
@@ -104,14 +109,14 @@ public class CustomerEventProjector extends DomainEventHandler {
 
 	@EventHandler
 	public void on(CustomerAddressAddedEvent event) {
-		String traceId = event.extractTraceId();
+		String traceId = traceService.getCurrentTraceId();
 		log.info("Projecting CustomerAddressAddedEvent for customer: {}, traceId: {}",
 				event.getAggregateId(), traceId);
 
-		Address newAddress = buildAddress(event);
+		var newAddress = buildAddress(event);
 
 		customerRepository.findById(event.getAggregateId())
-				.flatMap(customer -> updateCustomerWithNewAddress(customer, newAddress, event, traceId))
+				.flatMap(customer -> updateCustomerWithNewAddress(customer, newAddress, event, traceId, traceService.getCurrentSpanId()))
 				.flatMap(customerRepository::save)
 				.doOnSuccess(updated -> log.debug("Updated customer with new address in read model: {}, traceId: {}",
 						event.getAggregateId(), traceId))
@@ -122,12 +127,12 @@ public class CustomerEventProjector extends DomainEventHandler {
 
 	@EventHandler
 	public void on(CustomerAddressUpdatedEvent event) {
-		String traceId = event.extractTraceId();
+		String traceId = traceService.getCurrentTraceId();
 		log.info("Projecting CustomerAddressUpdatedEvent for customer: {}, traceId: {}",
 				event.getAggregateId(), traceId);
 
 		customerRepository.findById(event.getAggregateId())
-				.flatMap(customer -> updateCustomerAddress(customer, event, traceId))
+				.flatMap(customer -> updateCustomerAddress(customer, event, traceId, traceService.getCurrentSpanId()))
 				.flatMap(customerRepository::save)
 				.doOnSuccess(updated -> log.debug("Updated address in customer read model: {}, traceId: {}",
 						event.getAggregateId(), traceId))
@@ -138,12 +143,13 @@ public class CustomerEventProjector extends DomainEventHandler {
 
 	@EventHandler
 	public void on(CustomerAddressRemovedEvent event) {
-		String traceId = event.extractTraceId();
+		String traceId = traceService.getCurrentTraceId();
 		log.info("Projecting CustomerAddressRemovedEvent for customer: {}, traceId: {}",
 				event.getAggregateId(), traceId);
 
 		customerRepository.findById(event.getAggregateId())
-				.flatMap(customer -> removeAddressAndUpdateCustomer(customer, event, traceId))
+				.flatMap(customer -> removeAddressAndUpdateCustomer(customer, event, traceId
+						, traceService.getCurrentSpanId()))
 				.flatMap(customerRepository::save)
 				.doOnSuccess(updated -> log.debug("Removed address from customer read model: {}, traceId: {}",
 						event.getAggregateId(), traceId))
@@ -154,14 +160,14 @@ public class CustomerEventProjector extends DomainEventHandler {
 
 	@EventHandler
 	public void on(CustomerPreferencesUpdatedEvent event) {
-		String traceId = event.extractTraceId();
+		String traceId = traceService.getCurrentTraceId();
 		log.info("Projecting CustomerPreferencesUpdatedEvent for customer: {}, traceId: {}",
 				event.getAggregateId(), traceId);
 
 		customerRepository.findById(event.getAggregateId())
 				.flatMap(customer -> {
 					updatePreferences(customer, event.getPreferences());
-					updateTracingInfo(customer, event, traceId, "UpdatePreferences");
+					updateTracingInfo(customer, event, traceId, "UpdatePreferences", traceService.getCurrentSpanId());
 					return customerRepository.save(customer);
 				})
 				.doOnSuccess(updated -> log.debug("Updated preferences in customer read model: {}, traceId: {}",
@@ -173,12 +179,13 @@ public class CustomerEventProjector extends DomainEventHandler {
 
 	@EventHandler
 	public void on(CustomerDeactivatedEvent event) {
-		String traceId = event.extractTraceId();
+		String traceId = traceService.getCurrentTraceId();
+		String spanId = traceService.getCurrentSpanId();
 		log.info("Projecting CustomerDeactivatedEvent for customer: {}, traceId: {}",
 				event.getAggregateId(), traceId);
 
 		Query query = Query.query(Criteria.where("_id").is(event.getAggregateId()));
-		Update update = buildDeactivationUpdate(event, traceId);
+		Update update = buildDeactivationUpdate(event, traceId, spanId);
 
 		mongoTemplate.updateFirst(query, update, CustomerReadModel.class)
 				.doOnSuccess(result -> log.debug("Deactivated customer in read model: {}, traceId: {}",
@@ -190,7 +197,7 @@ public class CustomerEventProjector extends DomainEventHandler {
 
 	@EventHandler
 	public void on(CustomerReactivatedEvent event) {
-		String traceId = event.extractTraceId();
+		String traceId = traceService.getCurrentTraceId();
 		log.info("Projecting CustomerReactivatedEvent for customer: {}, traceId: {}",
 				event.getAggregateId(), traceId);
 
@@ -199,7 +206,7 @@ public class CustomerEventProjector extends DomainEventHandler {
 				.set("status", CustomerStatus.ACTIVE)
 				.set("updatedAt", event.getTimestamp())
 				.set("lastTraceId", traceId)
-				.set("lastSpanId", event.extractSpanId())
+				.set("lastSpanId", traceService.getCurrentSpanId())
 				.set("lastOperation", "ReactivateCustomer")
 				.set("lastUpdatedAt", Instant.now());
 
@@ -213,7 +220,7 @@ public class CustomerEventProjector extends DomainEventHandler {
 
 	@EventHandler
 	public void on(CustomerDeletedEvent event) {
-		String traceId = event.extractTraceId();
+		String traceId = traceService.getCurrentTraceId();
 		log.info("Projecting CustomerDeletedEvent for customer: {}, traceId: {}",
 				event.getAggregateId(), traceId);
 
@@ -222,7 +229,7 @@ public class CustomerEventProjector extends DomainEventHandler {
 				.set("status", CustomerStatus.DELETED)
 				.set("updatedAt", event.getTimestamp())
 				.set("lastTraceId", traceId)
-				.set("lastSpanId", event.extractSpanId())
+				.set("lastSpanId", traceService.getCurrentSpanId())
 				.set("lastOperation", "DeleteCustomer")
 				.set("lastUpdatedAt", Instant.now());
 

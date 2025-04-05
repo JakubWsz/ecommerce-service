@@ -2,7 +2,8 @@ package pl.ecommerce.commons.kafka;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.opentelemetry.api.GlobalOpenTelemetry;
-import io.opentelemetry.api.trace.*;
+import io.opentelemetry.api.trace.Span;
+import io.opentelemetry.api.trace.SpanKind;
 import io.opentelemetry.context.Context;
 import io.opentelemetry.context.Scope;
 import io.opentelemetry.context.propagation.TextMapGetter;
@@ -18,15 +19,13 @@ import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.kafka.support.Acknowledgment;
 import pl.ecommerce.commons.event.DomainEvent;
 import pl.ecommerce.commons.kafka.dlq.DlqMetrics;
-import pl.ecommerce.commons.tracing.TracingContext;
+import pl.ecommerce.commons.tracing.TraceService;
 
 import java.lang.reflect.Method;
 import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.Objects;
 
-import static java.util.Objects.isNull;
 import static java.util.Objects.nonNull;
 
 @Slf4j
@@ -36,6 +35,8 @@ public abstract class DomainEventHandler {
 	protected final ObjectMapper objectMapper;
 	protected final TopicsProvider topicsProvider;
 	protected final String applicationName;
+
+	private final TraceService traceService;
 
 	@Autowired(required = false)
 	private DlqMetrics dlqMetrics;
@@ -57,7 +58,6 @@ public abstract class DomainEventHandler {
 			Header header = nonNull(carrier) ? carrier.lastHeader(key) : null;
 			return nonNull(header) ? new String(header.value(), StandardCharsets.UTF_8) : null;
 		}
-
 	};
 
 	@PostConstruct
@@ -81,80 +81,48 @@ public abstract class DomainEventHandler {
 		return topicsProvider.getTopics();
 	}
 
-	public boolean processEvent(DomainEvent event, Map<String, String> headers) {
-		Method handler = handlerMethods.get(event.getClass());
-		if (nonNull(handler)) {
-			try {
-				if (handler.getParameterCount() == 1) {
-					handler.invoke(this, event);
-				} else {
-					handler.invoke(this, event, headers);
-				}
-				return true;
-			} catch (Exception e) {
-				log.error("Error invoking handler for event {}: {}",
-						event.getClass().getSimpleName(), e.getMessage(), e);
-			}
-		}
-		return false;
-	}
-
 	@KafkaListener(
 			topics = "#{@topicsProvider.getTopics()}",
 			groupId = "${event.listener.group-id:${spring.application.name}-group}",
 			containerFactory = "kafkaListenerContainerFactory"
 	)
 	public void consume(ConsumerRecord<String, Object> record, Acknowledgment ack) {
-		String traceId = "unknown";
-		String spanId = "0000000000000000";
+		TextMapGetter<Headers> headersGetter = new TextMapGetter<>() {
+			@Override
+			public Iterable<String> keys(Headers carrier) {
+				Map<String, String> headerMap = new HashMap<>();
+				for (Header header : carrier) {
+					headerMap.put(header.key(), "");
+				}
+				return headerMap.keySet();
+			}
+
+			@Override
+			public String get(Headers carrier, String key) {
+				Header header = nonNull(carrier) ? carrier.lastHeader(key) : null;
+				return nonNull(header) ? new String(header.value(), StandardCharsets.UTF_8) : null;
+			}
+		};
 
 		Context extractedContext = GlobalOpenTelemetry.getPropagators()
 				.getTextMapPropagator()
-				.extract(Context.current(), record.headers(), GETTER);
+				.extract(Context.current(), record.headers(), headersGetter);
 
-		Span span;
-		Span parentSpan = null;
-		SpanContext extractedSpanContext = Span.fromContext(extractedContext).getSpanContext();
-
-		if (extractedSpanContext.isValid()) {
-			traceId = extractedSpanContext.getTraceId();
-			spanId = extractedSpanContext.getSpanId();
-
-			parentSpan = Span.fromContext(extractedContext);
-		} else {
-			for (Header header : record.headers()) {
-				if ("trace-id".equals(header.key())) {
-					traceId = new String(header.value(), StandardCharsets.UTF_8);
-				} else if ("span-id".equals(header.key())) {
-					spanId = new String(header.value(), StandardCharsets.UTF_8);
-				}
-			}
-
-			SpanContext parentContext = SpanContext.createFromRemoteParent(
-					traceId,
-					spanId,
-					TraceFlags.getSampled(),
-					TraceState.getDefault()
-			);
-
-			parentSpan = Span.wrap(parentContext);
-		}
-
-		MDC.put("traceId", traceId);
-
-		Context contextWithParent = Context.current().with(parentSpan);
-
-		SpanBuilder spanBuilder = GlobalOpenTelemetry.getTracer(applicationName)
+		Span span = GlobalOpenTelemetry.getTracer(applicationName)
 				.spanBuilder("processKafkaEvent")
-				.setSpanKind(SpanKind.CONSUMER);
+				.setSpanKind(SpanKind.CONSUMER)
+				.setParent(extractedContext)
+				.startSpan();
 
-		if (nonNull(parentSpan)) {
-			spanBuilder.setParent(contextWithParent);
-		}
-
-		span = spanBuilder.startSpan();
+		String traceId = span.getSpanContext().getTraceId();
 
 		try (Scope scope = span.makeCurrent()) {
+			MDC.put("traceId", traceId);
+
+			span.setAttribute("messaging.system", "kafka");
+			span.setAttribute("messaging.destination", record.topic());
+			span.setAttribute("messaging.operation", "process");
+
 			Object value = record.value();
 
 			if (!(value instanceof DomainEvent event)) {
@@ -163,18 +131,21 @@ public abstract class DomainEventHandler {
 				return;
 			}
 
-			setTracingContextFromHeaders(record, event);
+			span.setAttribute("messaging.event_type", event.getEventType());
+			span.setAttribute("messaging.aggregate_id", event.getAggregateId().toString());
 
 			Map<String, String> headers = extractHeaders(record);
-
 			boolean processed = processEvent(event, headers);
+
 			if (!processed) {
-				log.info("No handler found for event type: {}, traceId: {}", event.getClass().getSimpleName(), traceId);
+				log.info("No handler found for event type: {}, traceId: {}",
+						event.getClass().getSimpleName(), traceId);
 			}
 
 			ack.acknowledge();
 		} catch (Exception e) {
-			log.error("Error processing Kafka message, traceId: {}: {}", traceId, e.getMessage(), e);
+			log.error("Error processing Kafka message: {}", e.getMessage(), e);
+			span.recordException(e);
 			ack.acknowledge();
 		} finally {
 			span.end();
@@ -182,56 +153,40 @@ public abstract class DomainEventHandler {
 		}
 	}
 
-	private void setTracingContextFromHeaders(ConsumerRecord<?, ?> record, DomainEvent event) {
-		String traceId = null;
-		String spanId = null;
-		String userId = null;
-		String sourceService = null;
-		String sourceOperation = null;
+	public boolean processEvent(DomainEvent event, Map<String, String> headers) {
+		Method handler = handlerMethods.get(event.getClass());
+		if (nonNull(handler)) {
+			Span span = GlobalOpenTelemetry.getTracer(applicationName)
+					.spanBuilder("handle-" + event.getEventType())
+					.setSpanKind(SpanKind.INTERNAL)
+					.startSpan();
 
-		Context extractedContext = GlobalOpenTelemetry.getPropagators()
-				.getTextMapPropagator()
-				.extract(Context.current(), record.headers(), GETTER);
-		SpanContext extractedSpanContext = Span.fromContext(extractedContext).getSpanContext();
+			try (Scope scope = span.makeCurrent()) {
+				span.setAttribute("event.type", event.getEventType());
+				span.setAttribute("event.aggregate_id", event.getAggregateId().toString());
+				span.setAttribute("event.version", event.getVersion());
 
-		if (extractedSpanContext.isValid()) {
-			traceId = extractedSpanContext.getTraceId();
-			spanId = extractedSpanContext.getSpanId();
-		}
+				MDC.put("traceId", span.getSpanContext().getTraceId());
 
-		if (isNull(traceId)) {
-			for (Header header : record.headers()) {
-				switch (header.key()) {
-					case "trace-id":
-						traceId = new String(header.value(), StandardCharsets.UTF_8);
-						break;
-					case "span-id":
-						spanId = new String(header.value(), StandardCharsets.UTF_8);
-						break;
-					case "user-id":
-						userId = new String(header.value(), StandardCharsets.UTF_8);
-						break;
-					case "source-service":
-						sourceService = new String(header.value(), StandardCharsets.UTF_8);
-						break;
-					case "source-operation":
-						sourceOperation = new String(header.value(), StandardCharsets.UTF_8);
-						break;
+				try {
+					if (handler.getParameterCount() == 1) {
+						handler.invoke(this, event);
+					} else {
+						handler.invoke(this, event, headers);
+					}
+					return true;
+				} catch (Exception e) {
+					log.error("Error invoking handler for event {}: {}",
+							event.getClass().getSimpleName(), e.getMessage(), e);
+					span.recordException(e);
+					return false;
 				}
+			} finally {
+				span.end();
+				MDC.remove("traceId");
 			}
 		}
-
-		if (nonNull(traceId)) {
-			TracingContext tracingContext = TracingContext.builder()
-					.traceId(traceId)
-					.spanId(spanId)
-					.userId(userId)
-					.sourceService(sourceService)
-					.sourceOperation(sourceOperation)
-					.build();
-
-			event.setTracingContext(tracingContext);
-		}
+		return false;
 	}
 
 	private Map<String, String> extractHeaders(ConsumerRecord<?, ?> record) {

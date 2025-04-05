@@ -4,13 +4,14 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
+import org.apache.kafka.clients.producer.ProducerConfig;
 import org.apache.kafka.common.serialization.StringDeserializer;
+import org.apache.kafka.common.serialization.StringSerializer;
 import org.springframework.boot.autoconfigure.kafka.KafkaProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.kafka.config.ConcurrentKafkaListenerContainerFactory;
-import org.springframework.kafka.core.ConsumerFactory;
-import org.springframework.kafka.core.DefaultKafkaConsumerFactory;
+import org.springframework.kafka.core.*;
 import org.springframework.kafka.listener.ContainerProperties;
 import org.springframework.kafka.support.converter.StringJsonMessageConverter;
 import org.springframework.kafka.support.serializer.ErrorHandlingDeserializer;
@@ -40,8 +41,29 @@ public class KafkaConfig {
 		props.put(JsonDeserializer.TRUSTED_PACKAGES, "pl.ecommerce.commons.event");
 		props.put(JsonDeserializer.VALUE_DEFAULT_TYPE, "pl.ecommerce.commons.event.AbstractDomainEvent");
 		props.put(JsonDeserializer.USE_TYPE_INFO_HEADERS, true);
+		DefaultKafkaProducerFactory<String, Object> factory = new DefaultKafkaProducerFactory<>(props);
+
+		props.put("header.propagation", "*");
 
 		return new DefaultKafkaConsumerFactory<>(props);
+	}
+
+	@Bean
+	public ProducerFactory<String, String> kafkaProducerFactory() {
+		Map<String, Object> props = new HashMap<>(kafkaProperties.buildProducerProperties());
+
+		props.put("header.propagation", "*");
+		props.put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, StringSerializer.class);
+		props.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, StringSerializer.class);
+
+		return new DefaultKafkaProducerFactory<>(props);
+	}
+
+	@Bean
+	public KafkaTemplate<String, String> kafkaTemplate() {
+		var kafkaTemplate = new KafkaTemplate<>(kafkaProducerFactory());
+		kafkaTemplate.setObservationEnabled(true);
+		return kafkaTemplate;
 	}
 
 	@Bean

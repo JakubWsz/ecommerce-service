@@ -1,14 +1,15 @@
 package pl.ecommerce.customer.write.domain.aggregate;
 
+import io.opentelemetry.api.trace.Span;
+import io.opentelemetry.api.trace.SpanContext;
 import lombok.Getter;
+import lombok.extern.slf4j.Slf4j;
 import pl.ecommerce.commons.command.Command;
 import pl.ecommerce.commons.command.CommandHandler;
 import pl.ecommerce.commons.event.DomainEvent;
 import pl.ecommerce.commons.event.EventApplier;
 import pl.ecommerce.commons.event.customer.*;
 import pl.ecommerce.commons.model.customer.*;
-import pl.ecommerce.commons.tracing.TracingContext;
-import pl.ecommerce.commons.tracing.TracingContextHolder;
 import pl.ecommerce.customer.write.domain.commands.*;
 import pl.ecommerce.customer.write.domain.handler.*;
 import pl.ecommerce.customer.write.infrastructure.exception.*;
@@ -20,6 +21,7 @@ import static java.util.Objects.isNull;
 import static java.util.Objects.nonNull;
 
 @Getter
+@Slf4j
 public class CustomerAggregate {
 	private UUID id;
 	private String email;
@@ -104,9 +106,12 @@ public class CustomerAggregate {
 	}
 
 	protected void applyChange(DomainEvent event) {
-		if (event.getTracingContext() == null) {
-			event.setTracingContext(TracingContext.createNew());
+		boolean needsTraceInfo = isNull(event.getTraceId()) || isNull(event.getSpanId());
+
+		if (needsTraceInfo) {
+			trySetTracingContextFromCurrentSpan(event);
 		}
+
 		apply(event);
 		uncommittedEvents.add(event);
 		version++;
@@ -116,6 +121,23 @@ public class CustomerAggregate {
 		EventApplier applier = eventAppliers.get(event.getClass());
 		if (nonNull(applier)) {
 			applier.apply(event);
+		}
+	}
+
+	private void trySetTracingContextFromCurrentSpan(DomainEvent event) {
+		Span currentSpan = Span.current();
+		SpanContext context = currentSpan.getSpanContext();
+
+		if (context.isValid()) {
+			if (isNull(event.getTraceId())) {
+				event.setTraceId(context.getTraceId());
+			}
+			if (isNull(event.getSpanId())) {
+				event.setSpanId(context.getSpanId());
+			}
+		} else {
+			log.warn("No valid OpenTelemetry SpanContext found. Could not set tracing context for event: {} (Type: {})",
+					event.getEventId(), event.getEventType());
 		}
 	}
 
