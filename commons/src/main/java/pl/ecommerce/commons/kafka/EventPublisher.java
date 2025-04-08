@@ -2,9 +2,9 @@ package pl.ecommerce.commons.kafka;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.producer.ProducerRecord;
-import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.kafka.support.SendResult;
 import org.springframework.stereotype.Component;
@@ -14,24 +14,13 @@ import reactor.core.publisher.Mono;
 
 import java.util.concurrent.CompletableFuture;
 
+@RequiredArgsConstructor
 @Component
 @Slf4j
 public class EventPublisher {
 
 	private final KafkaTemplate<String, String> kafkaTemplate;
 	private final ObjectMapper objectMapper;
-
-	public EventPublisher(ObjectProvider<KafkaTemplate<String, String>> kafkaTemplateProvider, ObjectMapper objectMapper) {
-		this.objectMapper = objectMapper;
-		this.kafkaTemplate = kafkaTemplateProvider.getIfAvailable();
-
-		if (this.kafkaTemplate == null) {
-			log.error("!!! CRITICAL: No KafkaTemplate<String, String> bean available for injection in EventPublisher !!!");
-			throw new IllegalStateException("KafkaTemplate bean not found");
-		} else {
-			log.info(">>> KafkaTemplate bean successfully injected into EventPublisher. Class: {}", this.kafkaTemplate.getClass().getName());
-		}
-	}
 
 	public Mono<Void> publish(DomainEvent event) {
 		return publish(event, null, null);

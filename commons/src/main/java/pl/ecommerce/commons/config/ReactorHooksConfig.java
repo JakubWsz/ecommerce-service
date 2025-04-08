@@ -1,4 +1,4 @@
-package pl.ecommerce.customer.write.infrastructure.config;
+package pl.ecommerce.commons.config;
 
 import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
@@ -11,12 +11,12 @@ public class ReactorHooksConfig {
 
 	@PostConstruct
 	public void initializeReactorHooks() {
-		log.info(">>> Attempting to explicitly enable Reactor automatic context propagation hooks <<<");
+		log.debug("Attempting to explicitly enable Reactor automatic context propagation hooks");
 		try {
 			Hooks.enableAutomaticContextPropagation();
-			log.info(">>> Call to Hooks.enableAutomaticContextPropagation() completed.");
+			log.debug("Call to Hooks.enableAutomaticContextPropagation() completed.");
 		} catch (Exception e) {
-			log.error("!!! Failed to enable Reactor automatic context propagation hooks via explicit call !!!", e);
+			log.error("Failed to enable Reactor automatic context propagation hooks via explicit call:", e);
 		}
 	}
 }

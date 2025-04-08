@@ -15,26 +15,18 @@ public class CustomKafkaProducerInterceptor implements ProducerInterceptor<Strin
 	@Override
 	public ProducerRecord<String, String> onSend(ProducerRecord<String, String> record) {
 		if (record.headers().lastHeader("traceparent") == null) {
-			log.debug("traceparent header is null");
 			KafkaTracingPropagator.inject(Context.current(), record.headers());
 		}
-		log.debug("record");
 		return record;
 	}
 
 	@Override
-	public void onAcknowledgement(RecordMetadata metadata, Exception exception) {
-		// Możesz tutaj dodać logikę obsługi potwierdzeń, jeśli potrzebujesz.
-	}
+	public void onAcknowledgement(RecordMetadata metadata, Exception exception) {}
 
 	@Override
-	public void close() {
-		// Cleanup, jeśli jest potrzebny.
-	}
+	public void close() {}
 
 	@Override
-	public void configure(Map<String, ?> configs) {
-		// Konfiguracja interceptora, jeśli jest wymagana.
-	}
+	public void configure(Map<String, ?> configs) {}
 }
 

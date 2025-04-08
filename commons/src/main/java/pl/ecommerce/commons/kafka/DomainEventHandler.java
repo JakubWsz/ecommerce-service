@@ -39,24 +39,6 @@ public abstract class DomainEventHandler {
 
 	private final Map<Class<? extends DomainEvent>, java.lang.reflect.Method> handlerMethods = new HashMap<>();
 
-	// Getter – pozostały bez zmian
-	private static final TextMapGetter<Headers> GETTER = new TextMapGetter<>() {
-		@Override
-		public Iterable<String> keys(Headers carrier) {
-			Map<String, String> headerMap = new HashMap<>();
-			for (Header header : carrier) {
-				headerMap.put(header.key(), "");
-			}
-			return headerMap.keySet();
-		}
-
-		@Override
-		public String get(Headers carrier, String key) {
-			Header header = nonNull(carrier) ? carrier.lastHeader(key) : null;
-			return nonNull(header) ? new String(header.value(), StandardCharsets.UTF_8) : null;
-		}
-	};
-
 	@PostConstruct
 	public void init() {
 		for (java.lang.reflect.Method method : this.getClass().getDeclaredMethods()) {
@@ -72,10 +54,6 @@ public abstract class DomainEventHandler {
 				}
 			}
 		}
-	}
-
-	public String[] getSubscribedTopics() {
-		return topicsProvider.getTopics();
 	}
 
 	public boolean processEvent(DomainEvent event, Map<String, String> headers) {
