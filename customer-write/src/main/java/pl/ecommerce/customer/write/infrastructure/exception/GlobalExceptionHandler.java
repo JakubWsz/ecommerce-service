@@ -1,20 +1,14 @@
 package pl.ecommerce.customer.write.infrastructure.exception;
 
 import lombok.extern.slf4j.Slf4j;
-import org.slf4j.MDC;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.bind.support.WebExchangeBindException;
-import pl.ecommerce.commons.tracing.TracingContext;
-import pl.ecommerce.commons.tracing.TracingContextHolder;
 
 import java.time.LocalDateTime;
 import java.util.stream.Collectors;
-
-import static java.util.Objects.isNull;
-import static java.util.Objects.nonNull;
 
 @RestControllerAdvice
 @Slf4j
@@ -22,16 +16,14 @@ public class GlobalExceptionHandler {
 
 	@ExceptionHandler(CustomerAlreadyExistsException.class)
 	public ResponseEntity<ErrorResponse> handleCustomerAlreadyExists(CustomerAlreadyExistsException ex) {
-		String traceId = getTraceId(ex);
-		log.error("Customer already exists: {}, traceId: {}", ex.getMessage(), traceId);
+		log.error("Customer already exists: {}", ex.getMessage());
 
 		return new ResponseEntity<>(
 				new ErrorResponse(
 						ex.getMessage(),
 						"CUSTOMER_ALREADY_EXISTS",
 						LocalDateTime.now(),
-						"Try a different email or username.",
-						traceId
+						"Try a different email or username."
 				),
 				HttpStatus.CONFLICT
 		);
@@ -39,16 +31,14 @@ public class GlobalExceptionHandler {
 
 	@ExceptionHandler(CustomerNotFoundException.class)
 	public ResponseEntity<ErrorResponse> handleCustomerNotFound(CustomerNotFoundException ex) {
-		String traceId = getTraceId(ex);
-		log.error("Customer not found: {}, traceId: {}", ex.getMessage(), traceId);
+		log.error("Customer not found: {}", ex.getMessage());
 
 		return new ResponseEntity<>(
 				new ErrorResponse(
 						ex.getMessage(),
 						"CUSTOMER_NOT_FOUND",
 						LocalDateTime.now(),
-						"Ensure the customer ID is correct.",
-						traceId
+						"Ensure the customer ID is correct."
 				),
 				HttpStatus.NOT_FOUND
 		);
@@ -56,16 +46,14 @@ public class GlobalExceptionHandler {
 
 	@ExceptionHandler(GdprConsentRequiredException.class)
 	public ResponseEntity<ErrorResponse> handleGdprConsentRequired(GdprConsentRequiredException ex) {
-		String traceId = getTraceId(ex);
-		log.error("GDPR consent required: {}, traceId: {}", ex.getMessage(), traceId);
+		log.error("GDPR consent required: {}", ex.getMessage());
 
 		return new ResponseEntity<>(
 				new ErrorResponse(
 						ex.getMessage(),
 						"GDPR_CONSENT_REQUIRED",
 						LocalDateTime.now(),
-						"User must provide consent before registration.",
-						traceId
+						"User must provide consent before registration."
 				),
 				HttpStatus.FORBIDDEN
 		);
@@ -73,16 +61,14 @@ public class GlobalExceptionHandler {
 
 	@ExceptionHandler(CustomerNotActiveException.class)
 	public ResponseEntity<ErrorResponse> handleCustomerNotActive(CustomerNotActiveException ex) {
-		String traceId = getTraceId(ex);
-		log.error("Customer not active: {}, traceId: {}", ex.getMessage(), traceId);
+		log.error("Customer not active: {}", ex.getMessage());
 
 		return new ResponseEntity<>(
 				new ErrorResponse(
 						ex.getMessage(),
 						"CUSTOMER_NOT_ACTIVE",
 						LocalDateTime.now(),
-						"Customer must be active to perform this operation.",
-						traceId
+						"Customer must be active to perform this operation."
 				),
 				HttpStatus.FORBIDDEN
 		);
@@ -90,16 +76,14 @@ public class GlobalExceptionHandler {
 
 	@ExceptionHandler(AddressNotFoundException.class)
 	public ResponseEntity<ErrorResponse> handleAddressNotFound(AddressNotFoundException ex) {
-		String traceId = getTraceId(ex);
-		log.error("Address not found: {}, traceId: {}", ex.getMessage(), traceId);
+		log.error("Address not found: {}", ex.getMessage());
 
 		return new ResponseEntity<>(
 				new ErrorResponse(
 						ex.getMessage(),
 						"ADDRESS_NOT_FOUND",
 						LocalDateTime.now(),
-						"The specified address does not exist.",
-						traceId
+						"The specified address does not exist."
 				),
 				HttpStatus.NOT_FOUND
 		);
@@ -107,16 +91,14 @@ public class GlobalExceptionHandler {
 
 	@ExceptionHandler(CannotRemoveDefaultAddressException.class)
 	public ResponseEntity<ErrorResponse> handleCannotRemoveDefaultAddress(CannotRemoveDefaultAddressException ex) {
-		String traceId = getTraceId(ex);
-		log.error("Cannot remove default address: {}, traceId: {}", ex.getMessage(), traceId);
+		log.error("Cannot remove default address: {}", ex.getMessage());
 
 		return new ResponseEntity<>(
 				new ErrorResponse(
 						ex.getMessage(),
 						"CANNOT_REMOVE_DEFAULT_ADDRESS",
 						LocalDateTime.now(),
-						"Set another address as default before removing this one.",
-						traceId
+						"Set another address as default before removing this one."
 				),
 				HttpStatus.CONFLICT
 		);
@@ -124,16 +106,14 @@ public class GlobalExceptionHandler {
 
 	@ExceptionHandler(ConcurrencyException.class)
 	public ResponseEntity<ErrorResponse> handleConcurrencyException(ConcurrencyException ex) {
-		String traceId = getCurrentTraceId();
-		log.error("Concurrency exception: {}, traceId: {}", ex.getMessage(), traceId);
+		log.error("Concurrency exception: {}", ex.getMessage());
 
 		return new ResponseEntity<>(
 				new ErrorResponse(
 						ex.getMessage(),
 						"CONCURRENCY_ERROR",
 						LocalDateTime.now(),
-						"The data was modified by another request. Please try again.",
-						traceId
+						"The data was modified by another request. Please try again."
 				),
 				HttpStatus.CONFLICT
 		);
@@ -141,16 +121,14 @@ public class GlobalExceptionHandler {
 
 	@ExceptionHandler(EventStoreException.class)
 	public ResponseEntity<ErrorResponse> handleEventStoreException(EventStoreException ex) {
-		String traceId = getCurrentTraceId();
-		log.error("Event store exception: {}, traceId: {}", ex.getMessage(), traceId);
+		log.error("Event store exception: {}", ex.getMessage());
 
 		return new ResponseEntity<>(
 				new ErrorResponse(
 						"An error occurred while processing your request.",
 						"EVENT_STORE_ERROR",
 						LocalDateTime.now(),
-						"Please try again later.",
-						traceId
+						"Please try again later."
 				),
 				HttpStatus.INTERNAL_SERVER_ERROR
 		);
@@ -158,7 +136,6 @@ public class GlobalExceptionHandler {
 
 	@ExceptionHandler(WebExchangeBindException.class)
 	public ResponseEntity<ErrorResponse> handleValidationException(WebExchangeBindException ex) {
-		String traceId = getCurrentTraceId();
 
 		String validationErrors = ex.getBindingResult()
 				.getFieldErrors()
@@ -166,15 +143,14 @@ public class GlobalExceptionHandler {
 				.map(error -> error.getField() + ": " + error.getDefaultMessage())
 				.collect(Collectors.joining(", "));
 
-		log.error("Validation error: {}, traceId: {}", validationErrors, traceId);
+		log.error("Validation error: {}", validationErrors);
 
 		return new ResponseEntity<>(
 				new ErrorResponse(
 						"Validation failed",
 						"VALIDATION_ERROR",
 						LocalDateTime.now(),
-						validationErrors,
-						traceId
+						validationErrors
 				),
 				HttpStatus.BAD_REQUEST
 		);
@@ -182,33 +158,16 @@ public class GlobalExceptionHandler {
 
 	@ExceptionHandler(Exception.class)
 	public ResponseEntity<ErrorResponse> handleGenericException(Exception ex) {
-		String traceId = getCurrentTraceId();
-		log.error("Unexpected error: {}, traceId: {}", ex.getMessage(), traceId, ex);
+		log.error("Unexpected error: {}", ex.getMessage(), ex);
 
 		return new ResponseEntity<>(
 				new ErrorResponse(
 						"An unexpected error occurred",
 						"INTERNAL_SERVER_ERROR",
 						LocalDateTime.now(),
-						"Please contact support if the problem persists.",
-						traceId
+						"Please contact support if the problem persists."
 				),
 				HttpStatus.INTERNAL_SERVER_ERROR
 		);
-	}
-
-	private String getTraceId(CustomerException ex) {
-		if (ex.hasTraceId()) {
-			return ex.getTraceId();
-		}
-		return getCurrentTraceId();
-	}
-
-	private String getCurrentTraceId() {
-		String traceId = MDC.get("traceId");
-		if (traceId == null) {
-			traceId = TracingContext.createNew().getTraceId();
-		}
-		return traceId != null ? traceId : "unknown";
 	}
 }

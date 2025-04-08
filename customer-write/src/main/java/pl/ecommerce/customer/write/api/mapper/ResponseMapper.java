@@ -7,37 +7,33 @@ import java.util.UUID;
 
 public interface ResponseMapper {
 
-	static CustomerRegistrationResponse map(UUID customerId, CustomerRegistrationRequest request, String traceId) {
+	static CustomerRegistrationResponse map(UUID customerId, CustomerRegistrationRequest request) {
 		return new CustomerRegistrationResponse(
 				customerId,
-				traceId,
 				request.email(),
 				request.firstName(),
 				request.lastName()
 		);
 	}
 
-	static CustomerUpdateResponse map(UUID customerId, CustomerUpdateRequest request, String traceId) {
+	static CustomerUpdateResponse map(UUID customerId, CustomerUpdateRequest request) {
 		return new CustomerUpdateResponse(
 				customerId,
-				traceId,
 				request.firstName(),
 				request.lastName()
 		);
 	}
 
-	static CustomerVerificationResponse map(UUID customerId, String traceId) {
+	static CustomerVerificationResponse map(UUID customerId) {
 		return new CustomerVerificationResponse(
-				customerId,
-				traceId
+				customerId
 		);
 	}
 
-	static CustomerPreferencesResponse map(UUID customerId, UpdatePreferencesRequest request, String traceId) {
+	static CustomerPreferencesResponse map(UUID customerId, UpdatePreferencesRequest request) {
 		return new CustomerPreferencesResponse(
 				customerId,
-				map(request),
-				traceId
+				map(request)
 		);
 	}
 
@@ -51,7 +47,7 @@ public interface ResponseMapper {
 				.build();
 	}
 
-	static CustomerShippingAddressResponse map(UUID customerId, AddShippingAddressRequest request, String traceId) {
+	static CustomerShippingAddressResponse map(UUID customerId, AddShippingAddressRequest request) {
 		return CustomerShippingAddressResponse.builder()
 				.customerId(customerId)
 				.city(request.city())
@@ -60,11 +56,10 @@ public interface ResponseMapper {
 				.street(request.street())
 				.buildingNumber(request.buildingNumber())
 				.apartmentNumber(request.apartmentNumber())
-				.traceId(traceId)
 				.build();
 	}
 
-	static CustomerShippingAddressResponse map(UUID customerId, UpdateShippingAddressRequest request, String traceId) {
+	static CustomerShippingAddressResponse map(UUID customerId, UpdateShippingAddressRequest request) {
 		return CustomerShippingAddressResponse.builder()
 				.customerId(customerId)
 				.city(request.city())
@@ -73,7 +68,6 @@ public interface ResponseMapper {
 				.street(request.street())
 				.buildingNumber(request.buildingNumber())
 				.apartmentNumber(request.apartmentNumber())
-				.traceId(traceId)
 				.build();
 	}
 }

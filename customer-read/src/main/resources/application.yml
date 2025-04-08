@@ -18,6 +18,7 @@ spring:
     bootstrap-servers: localhost:29092
     schema-registry-url: http://localhost:8081
     consumer:
+      observation-enabled: true
       group-id: ${spring.application.name}
       auto-offset-reset: earliest
       key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
@@ -26,7 +27,9 @@ spring:
         spring.json.trusted.packages: pl.ecommerce.customer.commons.events
       enable-auto-commit: false
     listener:
+      observation-enabled: true
       ack-mode: MANUAL
+
 
 # Configure the topics to listen for
 event:

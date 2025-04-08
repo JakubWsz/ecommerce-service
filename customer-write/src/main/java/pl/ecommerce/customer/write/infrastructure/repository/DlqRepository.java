@@ -1,4 +1,4 @@
-package pl.ecommerce.customer.write.infrastructure.event;
+package pl.ecommerce.customer.write.infrastructure.repository;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;

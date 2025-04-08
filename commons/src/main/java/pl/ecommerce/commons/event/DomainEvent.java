@@ -1,8 +1,5 @@
 package pl.ecommerce.commons.event;
 
-import pl.ecommerce.commons.event.vendor.VendorEvent;
-import pl.ecommerce.commons.tracing.TracingContext;
-
 import java.time.Instant;
 import java.util.UUID;
 
@@ -19,11 +16,4 @@ public interface DomainEvent {
 	Instant getTimestamp();
 
 	String getEventType();
-
-	TracingContext getTracingContext();
-
-	void setTracingContext(TracingContext tracingContext);
-
-	String extractTraceId();
-	String extractSpanId();
 }
