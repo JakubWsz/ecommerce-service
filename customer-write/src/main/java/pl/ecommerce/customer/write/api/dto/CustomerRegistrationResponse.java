@@ -8,8 +8,6 @@ import java.util.UUID;
 public record CustomerRegistrationResponse(
 		@Schema(description = "Customer ID", example = "e7b8c2d5-0d07-4f28-9e0b-8b68b4e68d9a")
 		UUID id,
-		@Schema(description = "Trace identifier", example = "12345678-1234-1234-1234-1234567890ab")
-		String traceId,
 		@Schema(description = "Customer's email", example = "john.doe@example.com")
 		String email,
 		@Schema(description = "Customer's first name", example = "John")

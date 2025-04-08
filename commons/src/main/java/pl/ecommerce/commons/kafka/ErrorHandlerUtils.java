@@ -24,17 +24,6 @@ public class ErrorHandlerUtils {
 			int retryAttempts,
 			long initialIntervalMs,
 			double multiplier,
-			long maxIntervalMs) {
-
-		return createDeadLetterErrorHandler(kafkaTemplate, retryAttempts, initialIntervalMs,
-				multiplier, maxIntervalMs, null, null);
-	}
-
-	public static CommonErrorHandler createDeadLetterErrorHandler(
-			KafkaTemplate<String, String> kafkaTemplate,
-			int retryAttempts,
-			long initialIntervalMs,
-			double multiplier,
 			long maxIntervalMs,
 			DlqMetrics dlqMetrics,
 			BiConsumer<Object, Exception> additionalAction) {

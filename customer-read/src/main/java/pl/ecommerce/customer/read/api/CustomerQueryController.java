@@ -1,28 +1,26 @@
 package pl.ecommerce.customer.read.api;
 
-import io.micrometer.observation.Observation;
-import io.micrometer.observation.ObservationRegistry;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageRequest;
-import org.springframework.data.domain.Sort;
-import org.springframework.http.HttpHeaders;
+import org.springframework.data.domain.*;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.RestController;
-import org.springframework.web.server.ServerWebExchange;
+import org.springframework.web.server.ResponseStatusException; // Do obsługi błędów
 import pl.ecommerce.commons.model.customer.CustomerStatus;
 import pl.ecommerce.commons.tracing.TracedOperation;
-import pl.ecommerce.commons.tracing.TracingContext;
 import pl.ecommerce.customer.read.aplication.dto.CustomerResponse;
 import pl.ecommerce.customer.read.aplication.dto.CustomerSummary;
+import pl.ecommerce.customer.read.aplication.mapper.CustomerMapper;
 import pl.ecommerce.customer.read.aplication.service.CustomerQueryService;
+import pl.ecommerce.customer.read.domain.model.CustomerReadModel;
 import reactor.core.publisher.Mono;
+import reactor.util.function.Tuple2;
 
-import java.util.Objects;
+import java.util.List;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @RestController
 @RequiredArgsConstructor
@@ -31,96 +29,89 @@ import java.util.UUID;
 public class CustomerQueryController implements CustomerApi {
 
 	private final CustomerQueryService customerQueryService;
-	private final ObservationRegistry observationRegistry;
 
 	@Override
 	@TracedOperation("getCustomerById")
-	public Mono<ResponseEntity<CustomerResponse>> getCustomerById(UUID id, ServerWebExchange exchange) {
-		TracingContext tracingContext = createTracingContext(exchange, "getCustomerById");
-		String traceId = tracingContext.getTraceId();
-		log.info("Received request to get customer with id: {}, traceId: {}", id, traceId);
-
-		return withObservation("getCustomerById", traceId,
-				customerQueryService.findById(id, tracingContext));
+	public Mono<ResponseEntity<CustomerResponse>> getCustomerById(UUID id) {
+		log.info("Received request to get customer with id: {}", id);
+		Mono<CustomerResponse> responseMono = customerQueryService.findById(id)
+				.map(CustomerMapper::toCustomerResponse);
+		return asResponseEntity(responseMono);
 	}
 
 	@Override
 	@TracedOperation("getCustomerByEmail")
-	public Mono<ResponseEntity<CustomerResponse>> getCustomerByEmail(String email, ServerWebExchange exchange) {
-		TracingContext tracingContext = createTracingContext(exchange, "getCustomerByEmail");
-		String traceId = tracingContext.getTraceId();
-		log.info("Received request to get customer with email: {}, traceId: {}", email, traceId);
-
-		return withObservation("getCustomerByEmail", traceId,
-				customerQueryService.findByEmail(email, tracingContext));
+	public Mono<ResponseEntity<CustomerResponse>> getCustomerByEmail(String email) {
+		log.info("Received request to get customer with email: {}", email);
+		Mono<CustomerResponse> responseMono = customerQueryService.findByEmail(email)
+				.map(CustomerMapper::toCustomerResponse);
+		return asResponseEntity(responseMono);
 	}
 
-	@Override
 	@TracedOperation("getCustomerByStatus")
-	public Mono<ResponseEntity<Page<CustomerSummary>>> getCustomerByStatus(String status, ServerWebExchange exchange,
-																		   int page, int size, String sortBy, String sortDir) {
-		TracingContext tracingContext = createTracingContext(exchange, "getCustomerByStatus");
-		String traceId = tracingContext.getTraceId();
-		log.info("Received request to get customers by status. page={}, size={}, traceId={}", page, size, traceId);
+	@Override
+	public Mono<ResponseEntity<Page<CustomerSummary>>> getCustomerByStatus(String status, int page, int size,
+																		   String sortBy, String sortDir) {
+		log.info("Received request to get customers by status. page={}, size={}", page, size);
 
-		Sort.Direction direction = sortDir.equalsIgnoreCase("desc") ? Sort.Direction.DESC : Sort.Direction.ASC;
-		PageRequest pageRequest = PageRequest.of(page, size, Sort.by(direction, sortBy));
-
-		return withObservation("getCustomerByStatus", traceId,
-				customerQueryService.findByStatus(CustomerStatus.valueOf(status), tracingContext, pageRequest)
-		);
+		return Mono.fromCallable(() -> CustomerStatus.valueOf(status.toUpperCase()))
+				.onErrorMap(IllegalArgumentException.class, e ->
+						new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid status value: " + status)
+				)
+				.flatMap(validStatus -> {
+					Pageable pageable = createPageable(page, size, sortBy, sortDir);
+					Mono<Tuple2<List<CustomerReadModel>, Long>> dataMono =
+							customerQueryService.findByStatus(validStatus, pageable);
+					return buildPageResponse(dataMono, pageable);
+				})
+				.transform(this::asResponseEntity);
 	}
 
 	@Override
 	@TracedOperation("getAllCustomers")
-	public Mono<ResponseEntity<Page<CustomerSummary>>> getAllCustomers(int page, int size, String sortBy, String sortDir, ServerWebExchange exchange) {
-		TracingContext tracingContext = createTracingContext(exchange, "getAllCustomers");
-		String traceId = tracingContext.getTraceId();
-		log.info("Received request to get all customers. page={}, size={}, traceId={}", page, size, traceId);
+	public Mono<ResponseEntity<Page<CustomerSummary>>> getAllCustomers(int page, int size, String sortBy,
+																	   String sortDir) {
+		log.info("Received request to get all customers. page={}, size={}", page, size);
+		Pageable pageable = createPageable(page, size, sortBy, sortDir);
+		Mono<Tuple2<List<CustomerReadModel>, Long>> dataMono = customerQueryService.findAllActive(pageable);
 
-		Sort.Direction direction = sortDir.equalsIgnoreCase("desc") ? Sort.Direction.DESC : Sort.Direction.ASC;
-		PageRequest pageRequest = PageRequest.of(page, size, Sort.by(direction, sortBy));
-
-		return withObservation("getAllCustomers", traceId,
-				customerQueryService.findAllActive(pageRequest, tracingContext)
-		);
+		return buildPageResponse(dataMono, pageable)
+				.transform(this::asResponseEntity);
 	}
 
 	@Override
 	@TracedOperation("searchCustomers")
-	public Mono<ResponseEntity<Page<CustomerSummary>>> searchCustomers(String query, int page, int size, ServerWebExchange exchange) {
-		TracingContext tracingContext = createTracingContext(exchange, "searchCustomers");
-		String traceId = tracingContext.getTraceId();
-		log.info("Received request to search customers with query: {}, traceId={}", query, traceId);
+	public Mono<ResponseEntity<Page<CustomerSummary>>> searchCustomers(String query, int page, int size) {
+		log.info("Received request to search customers with query: {}", query);
+		Pageable pageable = PageRequest.of(page, size);
+		Mono<Tuple2<List<CustomerReadModel>, Long>> dataMono = customerQueryService.searchByName(query, pageable);
 
-		PageRequest pageRequest = PageRequest.of(page, size);
-
-		return withObservation("searchCustomers", traceId,
-				customerQueryService.searchByName(query, pageRequest, tracingContext)
-		);
+		return buildPageResponse(dataMono, pageable)
+				.transform(this::asResponseEntity);
 	}
 
-	private <T> Mono<ResponseEntity<T>> withObservation(String opName, String traceId, Mono<T> mono) {
-		return Objects.requireNonNull(Observation.createNotStarted(opName, observationRegistry)
-						.observe(() -> mono))
-				.map(result -> ResponseEntity.status(HttpStatus.OK)
-						.header("X-Trace-Id", traceId)
-						.body(result));
+	private Pageable createPageable(int page, int size, String sortBy, String sortDir) {
+		Sort.Direction direction = sortDir.equalsIgnoreCase("desc") ? Sort.Direction.DESC : Sort.Direction.ASC;
+		return PageRequest.of(page, size, Sort.by(direction, sortBy));
 	}
 
-	private TracingContext createTracingContext(ServerWebExchange exchange, String operation) {
-		HttpHeaders headers = exchange.getRequest().getHeaders();
-		String traceId = headers.getFirst("X-Trace-Id");
-		if (traceId == null) {
-			traceId = UUID.randomUUID().toString();
-		}
-		String userId = headers.getFirst("X-User-Id");
-		return TracingContext.builder()
-				.traceId(traceId)
-				.spanId(UUID.randomUUID().toString())
-				.userId(userId)
-				.sourceService("customer-read")
-				.sourceOperation(operation)
-				.build();
+	private Mono<Page<CustomerSummary>> buildPageResponse(
+			Mono<Tuple2<List<CustomerReadModel>, Long>> dataAndCountMono,
+			Pageable pageable) {
+
+		return dataAndCountMono.map(tuple -> mapToPage(tuple.getT1(), pageable, tuple.getT2()));
+	}
+
+	private Page<CustomerSummary> mapToPage(List<CustomerReadModel> models, Pageable pageable, Long count) {
+		List<CustomerSummary> summaries = models.stream()
+				.map(CustomerMapper::toCustomerSummary)
+				.collect(Collectors.toList());
+		return new PageImpl<>(summaries, pageable, count);
+	}
+
+	private <T> Mono<ResponseEntity<T>> asResponseEntity(Mono<T> resultMono) {
+		return resultMono
+				.map(ResponseEntity::ok)
+				.defaultIfEmpty(ResponseEntity.notFound().build());
 	}
 }

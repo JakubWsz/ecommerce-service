@@ -7,8 +7,6 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ServerWebExchange;
 import pl.ecommerce.commons.tracing.TracedOperation;
-import pl.ecommerce.commons.tracing.TracingContext;
-import pl.ecommerce.commons.tracing.TracingContextHolder;
 import pl.ecommerce.customer.write.api.dto.*;
 import pl.ecommerce.customer.write.api.mapper.CommandMapper;
 import pl.ecommerce.customer.write.api.mapper.ResponseMapper;
@@ -17,7 +15,6 @@ import pl.ecommerce.customer.write.domain.commands.*;
 import reactor.core.publisher.Mono;
 
 import java.util.UUID;
-import java.util.function.Function;
 
 @RestController
 @RequiredArgsConstructor
@@ -30,40 +27,34 @@ public class CustomerController implements CustomerApi {
 	@TracedOperation("registerCustomer")
 	public Mono<ResponseEntity<CustomerRegistrationResponse>> registerCustomer(
 			CustomerRegistrationRequest request, ServerWebExchange exchange) {
-		return withTracingContext(exchange, "registerCustomer", tracingContext -> {
-			String traceId = tracingContext.getTraceId();
-			log.info("Received request to register customer with email: {}, traceId: {}",
-					request.email(), traceId);
-			var registerCustomerCommand = CommandMapper.map(request);
-			return customerApplicationService.registerCustomer(registerCustomerCommand)
-					.map(customerId -> ResponseEntity
+		log.debug("Received registerCustomer request for email: {}", request.email());
+		var registerCustomerCommand = CommandMapper.map(request);
+		return customerApplicationService.registerCustomer(registerCustomerCommand)
+				.map(customerId -> {
+					log.debug("Customer registered successfully: {}", customerId);
+					return ResponseEntity
 							.status(HttpStatus.CREATED)
-							.body(ResponseMapper.map(customerId, request, traceId)));
-		});
+							.body(ResponseMapper.map(customerId, request));
+				});
 	}
 
 	@Override
 	@TracedOperation("updateCustomer")
 	public Mono<ResponseEntity<CustomerUpdateResponse>> updateCustomer(
 			UUID id, CustomerUpdateRequest request, ServerWebExchange exchange) {
-		return withTracingContext(exchange, "updateCustomer", tracingContext -> {
-			String traceId = tracingContext.getTraceId();
-			log.info("Received request to update customer with id: {}, traceId: {}", id, traceId);
-			var updateCustomerCommand = CommandMapper.map(id, request);
-			return customerApplicationService.updateCustomer(updateCustomerCommand)
-					.map(customerId -> ResponseEntity
-							.ok()
-							.body(ResponseMapper.map(customerId, request, traceId)));
-		});
+		log.info("Received updateCustomer request for id: {}", id);
+		var updateCustomerCommand = CommandMapper.map(id, request);
+		return customerApplicationService.updateCustomer(updateCustomerCommand)
+				.map(customerId -> ResponseEntity
+						.ok()
+						.body(ResponseMapper.map(customerId, request)));
 	}
 
 	@Override
 	@TracedOperation("changeEmail")
 	public Mono<ResponseEntity<CustomerEmailChangeResponse>> changeEmail(
 			UUID id, String newEmail, ServerWebExchange exchange) {
-		return withTracingContext(exchange, "changeEmail", tracingContext -> {
-			String traceId = tracingContext.getTraceId();
-			log.info("Received request to change email for customer with id: {}, traceId: {}", id, traceId);
+
 			var changeCustomerEmailCommand = ChangeCustomerEmailCommand.builder()
 					.customerId(id)
 					.newEmail(newEmail)
@@ -71,17 +62,15 @@ public class CustomerController implements CustomerApi {
 			return customerApplicationService.changeEmail(changeCustomerEmailCommand)
 					.map(customerId -> ResponseEntity
 							.ok()
-							.body(new CustomerEmailChangeResponse(customerId, traceId, newEmail)));
-		});
-	}
+							.body(new CustomerEmailChangeResponse(customerId, newEmail)));
+		}
+
 
 	@Override
 	@TracedOperation("verifyEmail")
 	public Mono<ResponseEntity<CustomerVerificationResponse>> verifyEmail(
 			UUID id, String token, ServerWebExchange exchange) {
-		return withTracingContext(exchange, "verifyEmail", tracingContext -> {
-			String traceId = tracingContext.getTraceId();
-			log.info("Received request to verify email for customer with id: {}, traceId: {}", id, traceId);
+
 			var verifyCustomerEmailCommand = VerifyCustomerEmailCommand.builder()
 					.customerId(id)
 					.verificationToken(token)
@@ -89,28 +78,20 @@ public class CustomerController implements CustomerApi {
 			return customerApplicationService.verifyEmail(verifyCustomerEmailCommand)
 					.map(customerId -> ResponseEntity
 							.ok()
-							.body(new CustomerVerificationResponse(customerId, traceId)));
-		});
+							.body(new CustomerVerificationResponse(customerId)));
 	}
 
 	@Override
 	@TracedOperation("deleteCustomer")
 	public Mono<ResponseEntity<Void>> deleteCustomer(UUID id, ServerWebExchange exchange) {
-		return withTracingContext(exchange, "deleteCustomer", tracingContext -> {
-			String traceId = tracingContext.getTraceId();
-			log.info("Received request to delete customer with id: {}, traceId: {}", id, traceId);
 			return customerApplicationService.deleteCustomer(id)
 					.then(Mono.just(ResponseEntity.noContent().build()));
-		});
 	}
 
 	@Override
 	@TracedOperation("verifyPhoneNumber")
 	public Mono<ResponseEntity<CustomerPhoneVerificationResponse>> verifyPhoneNumber(
 			UUID id, String verificationToken, ServerWebExchange exchange) {
-		return withTracingContext(exchange, "verifyPhoneNumber", tracingContext -> {
-			String traceId = tracingContext.getTraceId();
-			log.info("Received request to verify phone number for customer with id: {}, traceId: {}", id, traceId);
 			var verifyCustomerPhoneCommand = VerifyCustomerPhoneCommand.builder()
 					.customerId(id)
 					.verificationToken(verificationToken)
@@ -118,78 +99,56 @@ public class CustomerController implements CustomerApi {
 			return customerApplicationService.verifyPhoneNumber(verifyCustomerPhoneCommand)
 					.map(customerId -> ResponseEntity
 							.ok()
-							.body(new CustomerPhoneVerificationResponse(customerId, traceId)));
-		});
+							.body(new CustomerPhoneVerificationResponse(customerId)));
 	}
 
 	@Override
 	@TracedOperation("addShippingAddress")
 	public Mono<ResponseEntity<CustomerShippingAddressResponse>> addShippingAddress(
 			UUID id, AddShippingAddressRequest request, ServerWebExchange exchange) {
-		return withTracingContext(exchange, "addShippingAddress", tracingContext -> {
-			String traceId = tracingContext.getTraceId();
-			log.info("Received request to add shipping address for customer with id: {}, traceId: {}", id, traceId);
 			var addAddressCommand = CommandMapper.map(id, request);
 			return customerApplicationService.addShippingAddress(addAddressCommand)
 					.map(customerId -> ResponseEntity
 							.status(HttpStatus.CREATED)
-							.body(ResponseMapper.map(customerId, request, traceId)));
-		});
+							.body(ResponseMapper.map(customerId, request)));
 	}
 
 	@Override
 	@TracedOperation("updateShippingAddress")
 	public Mono<ResponseEntity<CustomerShippingAddressResponse>> updateShippingAddress(
 			UUID id, UUID addressId, UpdateShippingAddressRequest request, ServerWebExchange exchange) {
-		return withTracingContext(exchange, "updateShippingAddress", tracingContext -> {
-			String traceId = tracingContext.getTraceId();
-			log.info("Received request to update shipping address for customer with id: {}, addressId: {}, traceId: {}",
-					id, addressId, traceId);
+
 			var updateAddressCommand = CommandMapper.map(id, addressId, request);
 			return customerApplicationService.updateShippingAddress(updateAddressCommand)
 					.map(customerId -> ResponseEntity
 							.ok()
-							.body(ResponseMapper.map(customerId, request, traceId)));
-		});
+							.body(ResponseMapper.map(customerId, request)));
 	}
 
 	@Override
 	@TracedOperation("removeShippingAddress")
 	public Mono<ResponseEntity<Void>> removeShippingAddress(
 			UUID id, UUID addressId, ServerWebExchange exchange) {
-		return withTracingContext(exchange, "removeShippingAddress", tracingContext -> {
-			String traceId = tracingContext.getTraceId();
-			log.info("Received request to remove shipping address for customer with id: {}, addressId: {}, traceId: {}",
-					id, addressId, traceId);
 			var removeAddressCommand = CommandMapper.map(id, addressId);
 			return customerApplicationService.removeShippingAddress(removeAddressCommand)
 					.then(Mono.just(ResponseEntity.noContent().build()));
-		});
 	}
 
 	@Override
 	@TracedOperation("updatePreferences")
 	public Mono<ResponseEntity<CustomerPreferencesResponse>> updatePreferences(
 			UUID id, UpdatePreferencesRequest request, ServerWebExchange exchange) {
-		return withTracingContext(exchange, "updatePreferences", tracingContext -> {
-			String traceId = tracingContext.getTraceId();
-			log.info("Received request to update preferences for customer with id: {}, traceId: {}", id, traceId);
 			var updatePreferencesCommand = CommandMapper.map(id, request);
 			return customerApplicationService.updatePreferences(updatePreferencesCommand)
 					.map(customerId -> ResponseEntity
 							.ok()
-							.body(ResponseMapper.map(customerId, request, traceId)));
-		});
+							.body(ResponseMapper.map(customerId, request)));
 	}
 
 	@Override
 	@TracedOperation("deactivate")
 	public Mono<ResponseEntity<CustomerDeactivationResponse>> deactivate(
 			UUID id, String reason, ServerWebExchange exchange) {
-		return withTracingContext(exchange, "deactivate", tracingContext -> {
-			String traceId = tracingContext.getTraceId();
-			log.info("Received request to deactivate customer with id: {}, reason: {}, traceId: {}",
-					id, reason, traceId);
 			var deactivateCommand = DeactivateCustomerCommand.builder()
 					.customerId(id)
 					.reason(reason)
@@ -197,18 +156,13 @@ public class CustomerController implements CustomerApi {
 			return customerApplicationService.deactivate(deactivateCommand)
 					.map(customerId -> ResponseEntity
 							.ok()
-							.body(new CustomerDeactivationResponse(customerId, traceId)));
-		});
+							.body(new CustomerDeactivationResponse(customerId)));
 	}
 
 	@Override
 	@TracedOperation("reactivate")
 	public Mono<ResponseEntity<CustomerReactivationResponse>> reactivate(
 			UUID id, String note, ServerWebExchange exchange) {
-		return withTracingContext(exchange, "reactivate", tracingContext -> {
-			String traceId = tracingContext.getTraceId();
-			log.info("Received request to reactivate customer with id: {}, note: {}, traceId: {}",
-					id, note, traceId);
 			var reactivateCommand = ReactivateCustomerCommand.builder()
 					.customerId(id)
 					.note(note)
@@ -216,18 +170,6 @@ public class CustomerController implements CustomerApi {
 			return customerApplicationService.reactivate(reactivateCommand)
 					.map(customerId -> ResponseEntity
 							.ok()
-							.body(new CustomerReactivationResponse(customerId, traceId)));
-		});
-	}
-
-	private <T> Mono<T> withTracingContext(ServerWebExchange exchange, String operation, Function<TracingContext, Mono<T>> action) {
-		return TracingContextHolder.fromContextMono()
-				.defaultIfEmpty(getFallbackTracingContext(exchange, operation))
-				.flatMap(action);
-	}
-
-	private TracingContext getFallbackTracingContext(ServerWebExchange exchange, String operation) {
-		String userId = exchange.getRequest().getHeaders().getFirst("X-User-Id");
-		return TracingContext.createNew("customer-write", operation, userId);
+							.body(new CustomerReactivationResponse(customerId)));
 	}
 }

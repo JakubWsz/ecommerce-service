@@ -6,7 +6,6 @@ import pl.ecommerce.commons.model.customer.AddressType;
 import pl.ecommerce.commons.model.customer.CustomerPreferences;
 import pl.ecommerce.commons.model.customer.CustomerStatus;
 import pl.ecommerce.commons.event.customer.*;
-import pl.ecommerce.commons.tracing.TracingContext;
 import pl.ecommerce.customer.read.domain.model.CustomerReadModel;
 import pl.ecommerce.customer.read.domain.model.PersonalData;
 import reactor.core.publisher.Mono;
@@ -20,8 +19,7 @@ import static java.util.Objects.nonNull;
 
 public interface CustomerEventProjectorHelper {
 
-	static CustomerReadModel buildCustomerReadModel(CustomerRegisteredEvent event, String traceId) {
-		var tracingContext = event.getTracingContext();
+	static CustomerReadModel buildCustomerReadModel(CustomerRegisteredEvent event) {
 		var aggregateId = event.getAggregateId();
 		return CustomerReadModel.builder()
 				.id(aggregateId)
@@ -36,8 +34,6 @@ public interface CustomerEventProjectorHelper {
 				.updatedAt(event.getTimestamp())
 				.addresses(new ArrayList<>())
 				.metadata(new HashMap<>())
-				.lastTraceId(traceId)
-				.lastSpanId(nonNull(tracingContext) ? tracingContext.getSpanId() : null)
 				.lastOperation("RegisterCustomer")
 				.lastUpdatedAt(Instant.now())
 				.personalData(buildPersonalData(event))
@@ -63,12 +59,9 @@ public interface CustomerEventProjectorHelper {
 				.build();
 	}
 
-	static Update buildUpdateForEvent(CustomerUpdatedEvent event, String traceId) {
-		TracingContext tracingContext = event.getTracingContext();
+	static Update buildUpdateForEvent(CustomerUpdatedEvent event) {
 		Update update = new Update()
 				.set("updatedAt", event.getTimestamp())
-				.set("lastTraceId", traceId)
-				.set("lastSpanId", nonNull(tracingContext) ? tracingContext.getSpanId() : null)
 				.set("lastOperation", "UpdateCustomer")
 				.set("lastUpdatedAt", Instant.now());
 		event.getChanges().forEach((key, value) -> applyChange(update, key, value));
@@ -90,26 +83,20 @@ public interface CustomerEventProjectorHelper {
 		}
 	}
 
-	static Update buildEmailChangeUpdate(CustomerEmailChangedEvent event, String traceId) {
-		TracingContext tracingContext = event.getTracingContext();
+	static Update buildEmailChangeUpdate(CustomerEmailChangedEvent event) {
 		return new Update()
 				.set("email", event.getNewEmail())
 				.set("personalData.email", event.getNewEmail())
 				.set("emailVerified", false)
 				.set("updatedAt", event.getTimestamp())
-				.set("lastTraceId", traceId)
-				.set("lastSpanId", nonNull(tracingContext) ? tracingContext.getSpanId() : null)
 				.set("lastOperation", "ChangeEmail")
 				.set("lastUpdatedAt", Instant.now());
 	}
 
-	static Update buildEmailVerifiedUpdate(CustomerEmailVerifiedEvent event, String traceId) {
-		TracingContext tracingContext = event.getTracingContext();
+	static Update buildEmailVerifiedUpdate(CustomerEmailVerifiedEvent event) {
 		return new Update()
 				.set("emailVerified", true)
 				.set("updatedAt", event.getTimestamp())
-				.set("lastTraceId", traceId)
-				.set("lastSpanId", nonNull(tracingContext) ? tracingContext.getSpanId() : null)
 				.set("lastOperation", "VerifyEmail")
 				.set("lastUpdatedAt", Instant.now());
 	}
@@ -130,7 +117,7 @@ public interface CustomerEventProjectorHelper {
 	}
 
 	static Mono<CustomerReadModel> updateCustomerWithNewAddress(CustomerReadModel customer, Address newAddress,
-																CustomerAddressAddedEvent event, String traceId) {
+																CustomerAddressAddedEvent event) {
 		if (event.isDefault() && nonNull(customer.getAddresses())) {
 			customer.getAddresses().forEach(existingAddress -> {
 				if (existingAddress.getAddressType().equals(newAddress.getAddressType())) {
@@ -142,11 +129,11 @@ public interface CustomerEventProjectorHelper {
 			customer.setAddresses(new ArrayList<>());
 		}
 		customer.getAddresses().add(newAddress);
-		updateTracingInfo(customer, event, traceId, "AddAddress");
+		updateTracingInfo(customer, event, "AddAddress");
 		return Mono.just(customer);
 	}
 
-	static Mono<CustomerReadModel> updateCustomerAddress(CustomerReadModel customer, CustomerAddressUpdatedEvent event, String traceId) {
+	static Mono<CustomerReadModel> updateCustomerAddress(CustomerReadModel customer, CustomerAddressUpdatedEvent event) {
 		if (nonNull(customer.getAddresses())) {
 			for (Address address : customer.getAddresses()) {
 				if (address.getId().equals(event.getAddressId())) {
@@ -158,7 +145,7 @@ public interface CustomerEventProjectorHelper {
 				}
 			}
 		}
-		updateTracingInfo(customer, event, traceId, "UpdateAddress");
+		updateTracingInfo(customer, event, "UpdateAddress");
 		return Mono.just(customer);
 	}
 
@@ -183,7 +170,7 @@ public interface CustomerEventProjectorHelper {
 		targetAddress.setDefault(true);
 	}
 
-	static Mono<CustomerReadModel> removeAddressAndUpdateCustomer(CustomerReadModel customer, CustomerAddressRemovedEvent event, String traceId) {
+	static Mono<CustomerReadModel> removeAddressAndUpdateCustomer(CustomerReadModel customer, CustomerAddressRemovedEvent event) {
 		if (nonNull(customer.getAddresses())) {
 			Address addressToRemove = customer.getAddresses().stream()
 					.filter(address -> address.getId().equals(event.getAddressId()))
@@ -201,14 +188,12 @@ public interface CustomerEventProjectorHelper {
 				}
 			}
 		}
-		updateCustomerTracingInfo(customer, event.getTimestamp(), traceId, "RemoveAddress", event.getTracingContext());
+		updateCustomerTracingInfo(customer, event.getTimestamp(), "RemoveAddress");
 		return Mono.just(customer);
 	}
 
-	static void updateCustomerTracingInfo(CustomerReadModel customer, Instant timestamp, String traceId, String operation, TracingContext tracingContext) {
+	static void updateCustomerTracingInfo(CustomerReadModel customer, Instant timestamp, String operation) {
 		customer.setUpdatedAt(timestamp);
-		customer.setLastTraceId(traceId);
-		customer.setLastSpanId(nonNull(tracingContext) ? tracingContext.getSpanId() : null);
 		customer.setLastOperation(operation);
 		customer.setLastUpdatedAt(Instant.now());
 	}
@@ -226,22 +211,16 @@ public interface CustomerEventProjectorHelper {
 		preferences.setFavoriteCategories(newPreferences.getFavoriteCategories());
 	}
 
-	static Update buildDeactivationUpdate(CustomerDeactivatedEvent event, String traceId) {
-		TracingContext tracingContext = event.getTracingContext();
+	static Update buildDeactivationUpdate(CustomerDeactivatedEvent event) {
 		return new Update()
 				.set("status", CustomerStatus.INACTIVE)
 				.set("updatedAt", event.getTimestamp())
-				.set("lastTraceId", traceId)
-				.set("lastSpanId", tracingContext != null ? tracingContext.getSpanId() : null)
 				.set("lastOperation", "DeactivateCustomer")
 				.set("lastUpdatedAt", Instant.now());
 	}
 
-	static void updateTracingInfo(CustomerReadModel customer, CustomerEvent event, String traceId, String operation) {
-		TracingContext tracingContext = event.getTracingContext();
+	static void updateTracingInfo(CustomerReadModel customer, CustomerEvent event, String operation) {
 		customer.setUpdatedAt(event.getTimestamp());
-		customer.setLastTraceId(traceId);
-		customer.setLastSpanId(nonNull(tracingContext) ? tracingContext.getSpanId() : null);
 		customer.setLastOperation(operation);
 		customer.setLastUpdatedAt(Instant.now());
 	}
