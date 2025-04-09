@@ -7,7 +7,6 @@ import pl.ecommerce.commons.event.DomainEvent;
 import pl.ecommerce.commons.event.EventApplier;
 import pl.ecommerce.commons.event.customer.*;
 import pl.ecommerce.commons.model.customer.*;
-import pl.ecommerce.commons.tracing.TracingContextHolder;
 import pl.ecommerce.customer.write.domain.commands.*;
 import pl.ecommerce.customer.write.domain.handler.*;
 import pl.ecommerce.customer.write.infrastructure.exception.*;
@@ -103,10 +102,6 @@ public class CustomerAggregate {
 	}
 
 	protected void applyChange(DomainEvent event) {
-		if (event.getTracingContext() == null && TracingContextHolder.getContext() != null) {
-			event.setTracingContext(TracingContextHolder.getContext());
-		}
-
 		apply(event);
 		uncommittedEvents.add(event);
 		version++;

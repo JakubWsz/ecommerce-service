@@ -19,43 +19,43 @@ import pl.ecommerce.commons.kafka.ErrorHandlerUtils;
 import java.util.HashMap;
 import java.util.Map;
 
-@Configuration
-@RequiredArgsConstructor
-@ConditionalOnProperty(value = "kafka.dlq.enabled", havingValue = "true", matchIfMissing = true)
-public class DlqConfig {
-
-	private final KafkaProperties kafkaProperties;
-	private final ObjectMapper objectMapper;
-	private final KafkaTemplate<String, String> kafkaTemplate;
-
-	@Bean
-	public ConsumerFactory<String, String> deadLetterQueueConsumerFactory() {
-		Map<String, Object> props = new HashMap<>(kafkaProperties.buildConsumerProperties());
-
-		props.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class.getName());
-		props.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class.getName());
-
-		return new DefaultKafkaConsumerFactory<>(props);
-	}
-
-	@Bean
-	public ConcurrentKafkaListenerContainerFactory<String, String> deadLetterQueueListenerContainerFactory() {
-		ConcurrentKafkaListenerContainerFactory<String, String> factory =
-				new ConcurrentKafkaListenerContainerFactory<>();
-		factory.setConsumerFactory(deadLetterQueueConsumerFactory());
-		factory.setRecordMessageConverter(new StringJsonMessageConverter(objectMapper));
-		factory.setCommonErrorHandler(deadLetterErrorHandler());
-		return factory;
-	}
-
-	@Bean
-	public CommonErrorHandler deadLetterErrorHandler() {
-		return ErrorHandlerUtils.createDeadLetterErrorHandler(
-				kafkaTemplate,
-				5,
-				1000L,
-				2.0,
-				60000L
-		);
-	}
-}
+//@Configuration
+//@RequiredArgsConstructor
+//@ConditionalOnProperty(value = "kafka.dlq.enabled", havingValue = "true", matchIfMissing = true)
+//public class DlqConfig {
+//
+//	private final KafkaProperties kafkaProperties;
+//	private final ObjectMapper objectMapper;
+//	private final KafkaTemplate<String, String> kafkaTemplate;
+//
+//	@Bean
+//	public ConsumerFactory<String, String> deadLetterQueueConsumerFactory() {
+//		Map<String, Object> props = new HashMap<>(kafkaProperties.buildConsumerProperties());
+//
+//		props.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class.getName());
+//		props.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class.getName());
+//
+//		return new DefaultKafkaConsumerFactory<>(props);
+//	}
+//
+//	@Bean
+//	public ConcurrentKafkaListenerContainerFactory<String, String> deadLetterQueueListenerContainerFactory() {
+//		ConcurrentKafkaListenerContainerFactory<String, String> factory =
+//				new ConcurrentKafkaListenerContainerFactory<>();
+//		factory.setConsumerFactory(deadLetterQueueConsumerFactory());
+//		factory.setRecordMessageConverter(new StringJsonMessageConverter(objectMapper));
+//		factory.setCommonErrorHandler(deadLetterErrorHandler());
+//		return factory;
+//	}
+//
+//	@Bean
+//	public CommonErrorHandler deadLetterErrorHandler() {
+//		return ErrorHandlerUtils.createDeadLetterErrorHandler(
+//				kafkaTemplate,
+//				5,
+//				1000L,
+//				2.0,
+//				60000L
+//		);
+//	}
+//}

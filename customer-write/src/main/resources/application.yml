@@ -23,11 +23,16 @@ spring:
     bootstrap-servers: localhost:29092
     schema-registry-url: http://localhost:8081
     producer:
+      observation-enabled: true
       retries: 3
       properties:
         delivery.timeout.ms: 120000
         request.timeout.ms: 30000
         retry.backoff.ms: 500
+    consumer:
+      observation-enabled: true
+    listener:
+      observation-enabled: true
 
 # Server settings
 server:
@@ -69,6 +74,11 @@ management:
     enabled: true
     propagation:
       type: w3c
+  observations:
+    http:
+      server:
+        requests:
+          enabled: true
   prometheus:
     metrics:
       export:

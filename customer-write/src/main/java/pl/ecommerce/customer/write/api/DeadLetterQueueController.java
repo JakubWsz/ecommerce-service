@@ -7,7 +7,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import pl.ecommerce.commons.tracing.TracedOperation;
-import pl.ecommerce.customer.write.infrastructure.event.DlqRepository;
+import pl.ecommerce.customer.write.infrastructure.repository.DlqRepository;
 
 import java.time.Instant;
 import java.util.HashMap;

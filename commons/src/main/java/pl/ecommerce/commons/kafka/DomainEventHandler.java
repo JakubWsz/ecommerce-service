@@ -1,25 +1,30 @@
 package pl.ecommerce.commons.kafka;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.opentelemetry.api.GlobalOpenTelemetry;
+import io.opentelemetry.api.trace.Span;
+import io.opentelemetry.api.trace.Tracer;
+import io.opentelemetry.context.Context;
+import io.opentelemetry.context.Scope;
+import io.opentelemetry.context.propagation.TextMapGetter;
 import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.common.header.Header;
-import org.slf4j.MDC;
+import org.apache.kafka.common.header.Headers;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.kafka.support.Acknowledgment;
 import pl.ecommerce.commons.event.DomainEvent;
 import pl.ecommerce.commons.kafka.dlq.DlqMetrics;
-import pl.ecommerce.commons.tracing.TracingContext;
+import pl.ecommerce.commons.tracing.KafkaTracingPropagator;
 
-import java.lang.reflect.Method;
 import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.Objects;
-import java.util.UUID;
+
+import static java.util.Objects.nonNull;
 
 @Slf4j
 @RequiredArgsConstructor
@@ -27,15 +32,16 @@ public abstract class DomainEventHandler {
 
 	protected final ObjectMapper objectMapper;
 	protected final TopicsProvider topicsProvider;
+	protected final String applicationName;
 
 	@Autowired(required = false)
 	private DlqMetrics dlqMetrics;
 
-	private final Map<Class<? extends DomainEvent>, Method> handlerMethods = new HashMap<>();
+	private final Map<Class<? extends DomainEvent>, java.lang.reflect.Method> handlerMethods = new HashMap<>();
 
 	@PostConstruct
 	public void init() {
-		for (Method method : this.getClass().getDeclaredMethods()) {
+		for (java.lang.reflect.Method method : this.getClass().getDeclaredMethods()) {
 			if (method.isAnnotationPresent(EventHandler.class)) {
 				Class<?>[] paramTypes = method.getParameterTypes();
 				if ((paramTypes.length == 1 && DomainEvent.class.isAssignableFrom(paramTypes[0])) ||
@@ -50,13 +56,9 @@ public abstract class DomainEventHandler {
 		}
 	}
 
-	public String[] getSubscribedTopics() {
-		return topicsProvider.getTopics();
-	}
-
 	public boolean processEvent(DomainEvent event, Map<String, String> headers) {
-		Method handler = handlerMethods.get(event.getClass());
-		if (handler != null) {
+		java.lang.reflect.Method handler = handlerMethods.get(event.getClass());
+		if (nonNull(handler)) {
 			try {
 				if (handler.getParameterCount() == 1) {
 					handler.invoke(this, event);
@@ -78,100 +80,46 @@ public abstract class DomainEventHandler {
 			containerFactory = "kafkaListenerContainerFactory"
 	)
 	public void consume(ConsumerRecord<String, Object> record, Acknowledgment ack) {
-		String traceId = "unknown";
-		for (Header header : record.headers()) {
-			if ("trace-id".equals(header.key())) {
-				traceId = new String(header.value(), StandardCharsets.UTF_8);
-				break;
-			}
-		}
+		log.debug("Received Kafka headers: {}", extractHeaders(record));
+		log.debug("Processing Kafka message - topic: {}, partition: {}, offset: {}, key: {}",
+				record.topic(), record.partition(), record.offset(), record.key());
 
-		MDC.put("traceId", traceId);
-
-		try {
-			Object value = record.value();
-
-			if (!(value instanceof DomainEvent event)) {
-				log.error("Received message is not a DomainEvent: {}, traceId: {}", value, traceId);
+		Context extractedContext = KafkaTracingPropagator.extract(Context.current(), record.headers());
+		Tracer tracer = GlobalOpenTelemetry.get().getTracer("customer-read");
+		Span consumerSpan = tracer.spanBuilder("Process Kafka message in customer-read")
+				.setParent(extractedContext)
+				.startSpan();
+		try (Scope scope = consumerSpan.makeCurrent()) {
+			try {
+				Object value = record.value();
+				if (!(value instanceof DomainEvent event)) {
+					log.error("Received message is not a DomainEvent: {}", value);
+					ack.acknowledge();
+					return;
+				}
+				Map<String, String> headersMap = extractHeaders(record);
+				boolean processed = processEvent(event, headersMap);
+				if (!processed) {
+					log.info("No handler found for event type: {}", event.getClass().getSimpleName());
+				}
 				ack.acknowledge();
-				return;
+			} catch (Exception e) {
+				log.error("Error processing Kafka message: {}", e.getMessage(), e);
+				ack.acknowledge();
 			}
-
-			setTracingContextFromHeaders(record, event);
-
-			String eventType = event.getClass().getSimpleName();
-			String key = record.key();
-			UUID aggregateId = event.getAggregateId();
-
-			log.info("Received event: {} with key: {}, aggregateId: {}, traceId: {}",
-					eventType, key, aggregateId, traceId);
-
-			Map<String, String> headers = extractHeaders(record);
-
-			boolean processed = processEvent(event, headers);
-			if (!processed) {
-				log.info("No handler found for event type: {}, traceId: {}", eventType, traceId);
-			}
-
-			ack.acknowledge();
-		} catch (Exception e) {
-			log.error("Error processing Kafka message, traceId: {}: {}", traceId, e.getMessage(), e);
-			ack.acknowledge();
 		} finally {
-			MDC.remove("traceId");
+			consumerSpan.end();
 		}
 	}
 
-	private void setTracingContextFromHeaders(ConsumerRecord<?, ?> record, DomainEvent event) {
-		String traceId = null;
-		String spanId = null;
-		String userId = null;
-		String sourceService = null;
-		String sourceOperation = null;
-
-		for (Header header : record.headers()) {
-			switch (header.key()) {
-				case "trace-id":
-					traceId = new String(header.value(), StandardCharsets.UTF_8);
-					break;
-				case "span-id":
-					spanId = new String(header.value(), StandardCharsets.UTF_8);
-					break;
-				case "user-id":
-					userId = new String(header.value(), StandardCharsets.UTF_8);
-					break;
-				case "source-service":
-					sourceService = new String(header.value(), StandardCharsets.UTF_8);
-					break;
-				case "source-operation":
-					sourceOperation = new String(header.value(), StandardCharsets.UTF_8);
-					break;
-			}
-		}
-
-		if (traceId != null) {
-			TracingContext tracingContext = TracingContext.builder()
-					.traceId(traceId)
-					.spanId(spanId)
-					.userId(userId)
-					.sourceService(sourceService)
-					.sourceOperation(sourceOperation)
-					.build();
-
-			event.setTracingContext(tracingContext);
-		}
-	}
-
-	private Map<String, String> extractHeaders(ConsumerRecord<?, ?> record) {
+	private Map<String, String> extractHeaders(ConsumerRecord<String, Object> record) {
 		Map<String, String> result = new HashMap<>();
-
 		for (Header header : record.headers()) {
-			if (Objects.nonNull(header.key()) && Objects.nonNull(header.value())) {
+			if (nonNull(header.key()) && nonNull(header.value())) {
 				String headerValue = new String(header.value(), StandardCharsets.UTF_8);
 				result.put(header.key(), headerValue);
 			}
 		}
-
 		return result;
 	}
 }

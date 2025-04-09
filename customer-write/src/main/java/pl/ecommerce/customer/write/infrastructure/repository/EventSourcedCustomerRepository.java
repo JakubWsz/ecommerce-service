@@ -1,5 +1,6 @@
 package pl.ecommerce.customer.write.infrastructure.repository;
 
+import io.opentelemetry.context.Context;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataAccessException;
@@ -8,8 +9,6 @@ import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
 import pl.ecommerce.commons.event.DomainEvent;
 import pl.ecommerce.commons.kafka.EventPublisher;
-import pl.ecommerce.commons.tracing.TracingContext;
-import pl.ecommerce.commons.tracing.TracingContextHolder;
 import pl.ecommerce.customer.write.domain.aggregate.CustomerAggregate;
 import pl.ecommerce.customer.write.infrastructure.eventstore.EventStore;
 import reactor.core.publisher.Flux;
@@ -18,7 +17,6 @@ import reactor.core.scheduler.Schedulers;
 
 import java.util.*;
 
-import static java.util.Objects.isNull;
 import static java.util.Objects.nonNull;
 
 @Repository
@@ -31,7 +29,7 @@ public class EventSourcedCustomerRepository implements CustomerRepository {
 	private final JdbcTemplate jdbcTemplate;
 
 	@Override
-	@Transactional
+//  @Transactional // Na razie pozostaw zakomentowane dla testu contextCapture
 	public Mono<CustomerAggregate> save(CustomerAggregate customer) {
 		List<DomainEvent> uncommittedEvents = customer.getUncommittedEvents();
 
@@ -40,23 +38,24 @@ public class EventSourcedCustomerRepository implements CustomerRepository {
 		}
 
 		return Mono.deferContextual(contextView -> {
-			TracingContext tracingContext = TracingContextHolder.getFromContext(contextView);
+					logContext(">>> Context at start of save.deferContextual", contextView);
 
-			if (Objects.nonNull(tracingContext)) {
-				uncommittedEvents.forEach(event -> {
-					if (Objects.isNull(event.getTracingContext())) {
-						event.setTracingContext(tracingContext);
-					}
-				});
-			} else {
-				ensureTracingContext(uncommittedEvents);
-			}
+					Mono<CustomerAggregate> operationChain = Mono.fromCallable(() -> {
+								logContext(">>> Context before persistEvents (inside fromCallable)");
+								return persistEvents(customer, uncommittedEvents);
+							})
+							.subscribeOn(Schedulers.boundedElastic())
+							.flatMap(savedCustomer -> {
+								logContext(">>> Context before publishEvents (inside flatMap)");
+								return publishEvents(uncommittedEvents)
+										.then(Mono.fromRunnable(savedCustomer::clearUncommittedEvents))
+										.thenReturn(savedCustomer);
+							});
 
-			return Mono.fromCallable(() -> persistEvents(customer, uncommittedEvents))
-					.flatMap(savedCustomer -> publishEvents(uncommittedEvents)
-							.then(Mono.fromRunnable(savedCustomer::clearUncommittedEvents))
-							.thenReturn(savedCustomer));
-		});
+					return operationChain.contextCapture();
+
+				}
+		);
 	}
 
 	@Override
@@ -97,38 +96,54 @@ public class EventSourcedCustomerRepository implements CustomerRepository {
 		});
 	}
 
-	private void ensureTracingContext(List<DomainEvent> events) {
-		TracingContext currentContext = TracingContextHolder.getContext();
-		if (nonNull(currentContext)) {
-			for (DomainEvent event : events) {
-				if (isNull(event.getTracingContext())) {
-					event.setTracingContext(currentContext);
-				}
-			}
-		}
-	}
-
 	private CustomerAggregate persistEvents(CustomerAggregate customer, List<DomainEvent> events) {
-		int expectedVersion = customer.getVersion() - events.size();
-		eventStore.saveEvents(customer.getId(), events, expectedVersion);
+		logContext(">>> Context at start of persistEvents (on BoundedElastic?)");
 
-		DomainEvent firstEvent = events.getFirst();
-		String traceId = nonNull(firstEvent.getTracingContext())
-				? firstEvent.getTracingContext().getTraceId()
-				: "unknown";
-		log.debug("Saved aggregate {} with {} events, traceId: {}",
-				customer.getId(), events.size(), traceId);
+		int expectedVersion = customer.getVersion() - events.size();
+
+		try {
+			eventStore.saveEvents(customer.getId(), events, expectedVersion);
+		} catch (Exception e) {
+			log.error("Exception occurred during eventStore.saveEvents for aggregate {}: {}",
+					customer.getId(), e.getMessage(), e);
+			throw e;
+		}
 
 		return customer;
 	}
 
 	private Mono<Void> publishEvents(List<DomainEvent> events) {
+		logContext(">>> Context at start of publishEvents method");
+
 		return Flux.fromIterable(events)
-				.doOnNext(event -> log.info("Publishing event: {} with type: {}",
-						event.getClass().getSimpleName(), event.getEventType()))
-				.flatMap(eventPublisher::publish)
-				.doOnError(e -> log.error("Error publishing event", e))
+				.flatMap(event -> {
+					logContext(">>> Context before eventPublisher.publish for event: " + event.getEventType());
+					return eventPublisher.publish(event);
+				})
+				.doOnError(e -> log.error("Błąd podczas publikowania strumienia zdarzeń: {}", e.getMessage(), e))
 				.then();
+	}
+
+
+	private void logContext(String message) {
+		try {
+			io.opentelemetry.api.trace.Span currentSpan = io.opentelemetry.api.trace.Span.fromContext(Context.current());
+			if (currentSpan != null && currentSpan.getSpanContext().isValid()) {
+				log.info("{} - Active OTel Span: traceId={}, spanId={}",
+						message,
+						currentSpan.getSpanContext().getTraceId(),
+						currentSpan.getSpanContext().getSpanId());
+			} else {
+				log.warn("{} - No valid OTel span found!", message);
+			}
+		} catch (Exception e) {
+			log.error("{} - Error checking OTel span", message, e);
+		}
+	}
+
+	private void logContext(String message, reactor.util.context.ContextView contextView) {
+		log.info("{} - Reactor ContextView present: {}", message, !contextView.isEmpty());
+		logContext(message);
 	}
 
 	private CustomerAggregate loadCustomerAggregate(UUID customerId) {
@@ -138,24 +153,12 @@ public class EventSourcedCustomerRepository implements CustomerRepository {
 				log.debug("No events found for customer: {}", customerId);
 				return null;
 			}
-			CustomerAggregate customer = new CustomerAggregate(events);
 
-			String traceId = extractTraceId(events);
-			log.debug("Reconstituted customer {} from {} events with traceId: {}",
-					customerId, events.size(), traceId);
-
-			return customer;
+			return new CustomerAggregate(events);
 		} catch (Exception e) {
 			log.error("Error finding customer by id {}: {}", customerId, e.getMessage(), e);
 			throw e;
 		}
-	}
-
-	private String extractTraceId(List<DomainEvent> events) {
-		DomainEvent firstEvent = events.getFirst();
-		return nonNull(firstEvent.getTracingContext())
-				? firstEvent.getTracingContext().getTraceId()
-				: "unknown";
 	}
 
 	private Boolean existsByEmailInternal(String email) {

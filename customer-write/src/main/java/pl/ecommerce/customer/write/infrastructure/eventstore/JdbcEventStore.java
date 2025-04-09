@@ -9,8 +9,6 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 import pl.ecommerce.commons.event.DomainEvent;
-import pl.ecommerce.commons.tracing.TracingContext;
-import pl.ecommerce.commons.tracing.TracingContextHolder;
 import pl.ecommerce.customer.write.infrastructure.exception.ConcurrencyException;
 import pl.ecommerce.customer.write.infrastructure.exception.EventStoreException;
 
@@ -33,6 +31,7 @@ public class JdbcEventStore implements EventStore {
 	@Transactional(propagation = Propagation.REQUIRED)
 	public void saveEvents(UUID aggregateId, List<DomainEvent> events, int expectedVersion) {
 		int currentVersion = getCurrentVersion(aggregateId);
+
 		if (expectedVersion != -1 && currentVersion != expectedVersion) {
 			throw new ConcurrencyException(String.format(
 					"Concurrent modification detected for aggregate %s. Expected version: %d, Actual version: %d",
@@ -40,13 +39,6 @@ public class JdbcEventStore implements EventStore {
 		}
 
 		for (DomainEvent event : events) {
-			if (Objects.isNull(event.getTracingContext())) {
-				TracingContext tracingContext = TracingContextHolder.getContext();
-				if (Objects.nonNull(tracingContext)) {
-					event.setTracingContext(tracingContext);
-				}
-			}
-
 			currentVersion = saveSingleEvent(aggregateId, currentVersion, event);
 		}
 	}
@@ -88,27 +80,21 @@ public class JdbcEventStore implements EventStore {
 		String aggregateType = determineAggregateType(event);
 		try {
 			String eventData = objectMapper.writeValueAsString(event);
-			TracingContext tracingContext = event.getTracingContext();
-			String traceId = Objects.nonNull(tracingContext) ? tracingContext.getTraceId() : null;
-			String spanId = Objects.nonNull(tracingContext) ? tracingContext.getSpanId() : null;
-
 			jdbcTemplate.update(
 					"INSERT INTO event_store (event_id, aggregate_id, aggregate_type, event_type, " +
-							"version, event_timestamp, event_data, trace_id, span_id) " +
-							"VALUES (?, ?, ?, ?, ?, ?, ?::jsonb, ?, ?)",
+							"version, event_timestamp, event_data) " +
+							"VALUES (?, ?, ?, ?, ?, ?, ?::jsonb)",
 					event.getEventId(),
 					aggregateId,
 					aggregateType,
 					event.getEventType(),
 					currentVersion + 1,
 					Timestamp.from(event.getTimestamp()),
-					eventData,
-					traceId,
-					spanId
+					eventData
 			);
 
-			log.debug("Saved event {} for aggregate {} with traceId {}, spanId {}",
-					event.getEventType(), aggregateId, traceId, spanId);
+			log.debug("Saved event {} for aggregate {}",
+					event.getEventType(), aggregateId);
 			return currentVersion + 1;
 		} catch (JsonProcessingException e) {
 			log.error("Error serializing event: {}", e.getMessage(), e);
@@ -133,25 +119,7 @@ public class JdbcEventStore implements EventStore {
 			String eventType = (String) row.get("event_type");
 			String eventData = (String) row.get("event_data");
 
-			DomainEvent event = deserializeEvent(eventType, eventData);
-
-			String traceId = (String) row.get("trace_id");
-			String spanId = (String) row.get("span_id");
-
-			if (Objects.nonNull(traceId)) {
-				TracingContext tracingContext = TracingContext.builder()
-						.traceId(traceId)
-						.spanId(spanId)
-						.sourceService("customer-write")
-						.build();
-
-				event.setTracingContext(tracingContext);
-
-				log.debug("Loaded event {} with traceId {}, spanId {}",
-						eventType, tracingContext.getTraceId(), tracingContext.getSpanId());
-			}
-
-			return event;
+			return deserializeEvent(eventType, eventData);
 		} catch (Exception e) {
 			log.error("Error deserializing event: {}", e.getMessage(), e);
 			throw new EventStoreException("Error loading events from event store", e);

@@ -12,7 +12,7 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.kafka.listener.CommonErrorHandler;
 import pl.ecommerce.commons.kafka.TopicsProvider;
-import pl.ecommerce.commons.kafka.dlq.DlqConfig;
+//import pl.ecommerce.commons.kafka.dlq.DlqConfig;
 
 import java.util.List;
 
@@ -50,17 +50,12 @@ public class ApplicationConfig {
 		return provider;
 	}
 
-	@Bean
-	public ObservedAspect observedAspect(ObservationRegistry observationRegistry) {
-		return new ObservedAspect(observationRegistry);
-	}
-
-	@Bean
-	public CommonErrorHandler kafkaErrorHandler(KafkaTemplate<String, String> kafkaTemplate,
-												ObjectMapper objectMapper) {
-		return new DlqConfig(
-				kafkaProperties,
-				objectMapper,
-				kafkaTemplate).deadLetterErrorHandler();
-	}
+//	@Bean
+//	public CommonErrorHandler kafkaErrorHandler(KafkaTemplate<String, String> kafkaTemplate,
+//												ObjectMapper objectMapper) {
+//		return new DlqConfig(
+//				kafkaProperties,
+//				objectMapper,
+//				kafkaTemplate).deadLetterErrorHandler();
+//	}
 }

@@ -2,6 +2,7 @@ package pl.ecommerce.customer.read.infrastructure.projector;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.core.env.Environment;
 import org.springframework.data.mongodb.core.ReactiveMongoTemplate;
 import org.springframework.data.mongodb.core.query.Criteria;
 import org.springframework.data.mongodb.core.query.Query;
@@ -28,207 +29,194 @@ public class CustomerEventProjector extends DomainEventHandler {
 	private final CustomerReadRepository customerRepository;
 
 	public CustomerEventProjector(ReactiveMongoTemplate mongoTemplate, CustomerReadRepository customerRepository,
-								  ObjectMapper objectMapper, TopicsProvider topicsProvider) {
-		super(objectMapper, topicsProvider);
+								  ObjectMapper objectMapper, TopicsProvider topicsProvider, Environment environment) {
+		super(objectMapper, topicsProvider,environment.getProperty("spring.application.name"));
 		this.mongoTemplate = mongoTemplate;
 		this.customerRepository = customerRepository;
 	}
 
 	@EventHandler
 	public void on(CustomerRegisteredEvent event) {
-		String traceId = event.extractTraceId();
-		log.info("Projecting CustomerRegisteredEvent for customer: {}, traceId: {}",
-				event.getAggregateId(), traceId);
+		log.info("Projecting CustomerRegisteredEvent for customer: {}",
+				event.getAggregateId());
 
-		CustomerReadModel customer = buildCustomerReadModel(event, traceId);
+		CustomerReadModel customer = buildCustomerReadModel(event);
 		customerRepository.save(customer)
-				.doOnSuccess(saved -> log.debug("Customer read model saved successfully: {}, traceId: {}",
-						saved.getId(), traceId))
-				.doOnError(error -> log.error("Error saving customer read model: {}, traceId: {}",
-						error.getMessage(), traceId, error))
+				.doOnSuccess(saved -> log.debug("Customer read model saved successfully: {}",
+						saved.getId()))
+				.doOnError(error -> log.error("Error saving customer read model: {}",
+						error.getMessage(), error))
 				.subscribe();
 	}
 
 	@EventHandler
 	public void on(CustomerUpdatedEvent event) {
-		String traceId = event.extractTraceId();
-		log.info("Projecting CustomerUpdatedEvent for customer: {}, traceId: {}",
-				event.getAggregateId(), traceId);
+		log.info("Projecting CustomerUpdatedEvent for customer: {}",
+				event.getAggregateId());
 
 		Query query = Query.query(Criteria.where("_id").is(event.getAggregateId()));
-		Update update = buildUpdateForEvent(event, traceId);
+		Update update = buildUpdateForEvent(event);
 
 		mongoTemplate.updateFirst(query, update, CustomerReadModel.class)
-				.doOnSuccess(result -> log.debug("Updated customer read model: {}, modified: {}, traceId: {}",
-						event.getAggregateId(), result.getModifiedCount(), traceId))
-				.doOnError(error -> log.error("Error updating customer read model: {}, traceId: {}",
-						error.getMessage(), traceId, error))
+				.doOnSuccess(result -> log.debug("Updated customer read model: {}, modified: {}",
+						event.getAggregateId(), result.getModifiedCount()))
+				.doOnError(error -> log.error("Error updating customer read model: {}",
+						error.getMessage(), error))
 				.subscribe();
 	}
 
 	@EventHandler
 	public void on(CustomerEmailChangedEvent event) {
-		String traceId = event.extractTraceId();
-		log.info("Projecting CustomerEmailChangedEvent for customer: {}, traceId: {}",
-				event.getAggregateId(), traceId);
+		log.info("Projecting CustomerEmailChangedEvent for customer: {}",
+				event.getAggregateId());
 
 		Query query = Query.query(Criteria.where("_id").is(event.getAggregateId()));
-		Update update = buildEmailChangeUpdate(event, traceId);
+		Update update = buildEmailChangeUpdate(event);
 
 		mongoTemplate.updateFirst(query, update, CustomerReadModel.class)
-				.doOnSuccess(result -> log.debug("Updated customer email in read model: {}, traceId: {}",
-						event.getAggregateId(), traceId))
-				.doOnError(error -> log.error("Error updating customer email in read model: {}, traceId: {}",
-						error.getMessage(), traceId, error))
+				.doOnSuccess(result -> log.debug("Updated customer email in read model: {}",
+						event.getAggregateId()))
+				.doOnError(error -> log.error("Error updating customer email in read model: {}",
+						error.getMessage(), error))
 				.subscribe();
 	}
 
 	@EventHandler
 	public void on(CustomerEmailVerifiedEvent event) {
-		String traceId = event.extractTraceId();
-		log.info("Projecting CustomerEmailVerifiedEvent for customer: {}, traceId: {}",
-				event.getAggregateId(), traceId);
+		log.info("Projecting CustomerEmailVerifiedEvent for customer: {}",
+				event.getAggregateId());
 
 		Query query = Query.query(Criteria.where("_id").is(event.getAggregateId()));
-		Update update = buildEmailVerifiedUpdate(event, traceId);
+		Update update = buildEmailVerifiedUpdate(event);
 
 		mongoTemplate.updateFirst(query, update, CustomerReadModel.class)
-				.doOnSuccess(result -> log.debug("Updated customer email verification in read model: {}, traceId: {}",
-						event.getAggregateId(), traceId))
-				.doOnError(error -> log.error("Error updating customer email verification in read model: {}, traceId: {}",
-						error.getMessage(), traceId, error))
+				.doOnSuccess(result -> log.debug("Updated customer email verification in read model: {}",
+						event.getAggregateId()))
+				.doOnError(error -> log.error("Error updating customer email verification in read model: {}",
+						error.getMessage(), error))
 				.subscribe();
 	}
 
 	@EventHandler
 	public void on(CustomerAddressAddedEvent event) {
-		String traceId = event.extractTraceId();
-		log.info("Projecting CustomerAddressAddedEvent for customer: {}, traceId: {}",
-				event.getAggregateId(), traceId);
+		log.info("Projecting CustomerAddressAddedEvent for customer: {}",
+				event.getAggregateId());
 
 		Address newAddress = buildAddress(event);
 
 		customerRepository.findById(event.getAggregateId())
-				.flatMap(customer -> updateCustomerWithNewAddress(customer, newAddress, event, traceId))
+				.flatMap(customer -> updateCustomerWithNewAddress(customer, newAddress, event))
 				.flatMap(customerRepository::save)
-				.doOnSuccess(updated -> log.debug("Updated customer with new address in read model: {}, traceId: {}",
-						event.getAggregateId(), traceId))
-				.doOnError(error -> log.error("Error updating customer with new address in read model: {}, traceId: {}",
-						error.getMessage(), traceId, error))
+				.doOnSuccess(updated -> log.debug("Updated customer with new address in read model: {}",
+						event.getAggregateId()))
+				.doOnError(error -> log.error("Error updating customer with new address in read model: {}",
+						error.getMessage(), error))
 				.subscribe();
 	}
 
 	@EventHandler
 	public void on(CustomerAddressUpdatedEvent event) {
-		String traceId = event.extractTraceId();
-		log.info("Projecting CustomerAddressUpdatedEvent for customer: {}, traceId: {}",
-				event.getAggregateId(), traceId);
+		log.info("Projecting CustomerAddressUpdatedEvent for customer: {}",
+				event.getAggregateId());
 
 		customerRepository.findById(event.getAggregateId())
-				.flatMap(customer -> updateCustomerAddress(customer, event, traceId))
+				.flatMap(customer -> updateCustomerAddress(customer, event))
 				.flatMap(customerRepository::save)
-				.doOnSuccess(updated -> log.debug("Updated address in customer read model: {}, traceId: {}",
-						event.getAggregateId(), traceId))
-				.doOnError(error -> log.error("Error updating address in customer read model: {}, traceId: {}",
-						error.getMessage(), traceId, error))
+				.doOnSuccess(updated -> log.debug("Updated address in customer read model: {}",
+						event.getAggregateId()))
+				.doOnError(error -> log.error("Error updating address in customer read model: {}",
+						error.getMessage(), error))
 				.subscribe();
 	}
 
 	@EventHandler
 	public void on(CustomerAddressRemovedEvent event) {
-		String traceId = event.extractTraceId();
-		log.info("Projecting CustomerAddressRemovedEvent for customer: {}, traceId: {}",
-				event.getAggregateId(), traceId);
+		log.info("Projecting CustomerAddressRemovedEvent for customer: {}",
+				event.getAggregateId());
 
 		customerRepository.findById(event.getAggregateId())
-				.flatMap(customer -> removeAddressAndUpdateCustomer(customer, event, traceId))
+				.flatMap(customer -> removeAddressAndUpdateCustomer(customer, event))
 				.flatMap(customerRepository::save)
-				.doOnSuccess(updated -> log.debug("Removed address from customer read model: {}, traceId: {}",
-						event.getAggregateId(), traceId))
-				.doOnError(error -> log.error("Error removing address from customer read model: {}, traceId: {}",
-						error.getMessage(), traceId, error))
+				.doOnSuccess(updated -> log.debug("Removed address from customer read model: {}",
+						event.getAggregateId()))
+				.doOnError(error -> log.error("Error removing address from customer read model: {}",
+						error.getMessage(), error))
 				.subscribe();
 	}
 
 	@EventHandler
 	public void on(CustomerPreferencesUpdatedEvent event) {
-		String traceId = event.extractTraceId();
-		log.info("Projecting CustomerPreferencesUpdatedEvent for customer: {}, traceId: {}",
-				event.getAggregateId(), traceId);
+		log.info("Projecting CustomerPreferencesUpdatedEvent for customer: {}",
+				event.getAggregateId());
 
 		customerRepository.findById(event.getAggregateId())
 				.flatMap(customer -> {
 					updatePreferences(customer, event.getPreferences());
-					updateTracingInfo(customer, event, traceId, "UpdatePreferences");
+					updateTracingInfo(customer, event, "UpdatePreferences");
 					return customerRepository.save(customer);
 				})
-				.doOnSuccess(updated -> log.debug("Updated preferences in customer read model: {}, traceId: {}",
-						event.getAggregateId(), traceId))
-				.doOnError(error -> log.error("Error updating preferences in customer read model: {}, traceId: {}",
-						error.getMessage(), traceId, error))
+				.doOnSuccess(updated -> log.debug("Updated preferences in customer read model: {}",
+						event.getAggregateId()))
+				.doOnError(error -> log.error("Error updating preferences in customer read model: {}",
+						error.getMessage(), error))
 				.subscribe();
 	}
 
 	@EventHandler
 	public void on(CustomerDeactivatedEvent event) {
-		String traceId = event.extractTraceId();
-		log.info("Projecting CustomerDeactivatedEvent for customer: {}, traceId: {}",
-				event.getAggregateId(), traceId);
+		log.info("Projecting CustomerDeactivatedEvent for customer: {}",
+				event.getAggregateId());
 
 		Query query = Query.query(Criteria.where("_id").is(event.getAggregateId()));
-		Update update = buildDeactivationUpdate(event, traceId);
+		Update update = buildDeactivationUpdate(event);
 
 		mongoTemplate.updateFirst(query, update, CustomerReadModel.class)
-				.doOnSuccess(result -> log.debug("Deactivated customer in read model: {}, traceId: {}",
-						event.getAggregateId(), traceId))
-				.doOnError(error -> log.error("Error deactivating customer in read model: {}, traceId: {}",
-						error.getMessage(), traceId, error))
+				.doOnSuccess(result -> log.debug("Deactivated customer in read model: {}",
+						event.getAggregateId()))
+				.doOnError(error -> log.error("Error deactivating customer in read model: {}",
+						error.getMessage(), error))
 				.subscribe();
 	}
 
 	@EventHandler
 	public void on(CustomerReactivatedEvent event) {
-		String traceId = event.extractTraceId();
-		log.info("Projecting CustomerReactivatedEvent for customer: {}, traceId: {}",
-				event.getAggregateId(), traceId);
+		
+		log.info("Projecting CustomerReactivatedEvent for customer: {}",
+				event.getAggregateId());
 
 		Query query = Query.query(Criteria.where("_id").is(event.getAggregateId()));
 		Update update = new Update()
 				.set("status", CustomerStatus.ACTIVE)
 				.set("updatedAt", event.getTimestamp())
-				.set("lastTraceId", traceId)
-				.set("lastSpanId", event.extractSpanId())
 				.set("lastOperation", "ReactivateCustomer")
 				.set("lastUpdatedAt", Instant.now());
 
 		mongoTemplate.updateFirst(query, update, CustomerReadModel.class)
-				.doOnSuccess(result -> log.debug("Reactivated customer in read model: {}, traceId: {}",
-						event.getAggregateId(), traceId))
-				.doOnError(error -> log.error("Error reactivating customer in read model: {}, traceId: {}",
-						error.getMessage(), traceId, error))
+				.doOnSuccess(result -> log.debug("Reactivated customer in read model: {}",
+						event.getAggregateId()))
+				.doOnError(error -> log.error("Error reactivating customer in read model: {}",
+						error.getMessage(), error))
 				.subscribe();
 	}
 
 	@EventHandler
 	public void on(CustomerDeletedEvent event) {
-		String traceId = event.extractTraceId();
-		log.info("Projecting CustomerDeletedEvent for customer: {}, traceId: {}",
-				event.getAggregateId(), traceId);
+		
+		log.info("Projecting CustomerDeletedEvent for customer: {}",
+				event.getAggregateId());
 
 		Query query = Query.query(Criteria.where("_id").is(event.getAggregateId()));
 		Update update = new Update()
 				.set("status", CustomerStatus.DELETED)
 				.set("updatedAt", event.getTimestamp())
-				.set("lastTraceId", traceId)
-				.set("lastSpanId", event.extractSpanId())
 				.set("lastOperation", "DeleteCustomer")
 				.set("lastUpdatedAt", Instant.now());
 
 		mongoTemplate.updateFirst(query, update, CustomerReadModel.class)
-				.doOnSuccess(result -> log.debug("Marked customer as deleted in read model: {}, traceId: {}",
-						event.getAggregateId(), traceId))
-				.doOnError(error -> log.error("Error marking customer as deleted in read model: {}, traceId: {}",
-						error.getMessage(), traceId, error))
+				.doOnSuccess(result -> log.debug("Marked customer as deleted in read model: {}",
+						event.getAggregateId()))
+				.doOnError(error -> log.error("Error marking customer as deleted in read model: {}",
+						error.getMessage(), error))
 				.subscribe();
 	}
 }
