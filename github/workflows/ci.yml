@@ -10,10 +10,6 @@ jobs:
   build:
     name: build and test
     runs-on: ubuntu-latest
-    services:
-      docker:
-        image: docker:dind
-        options: --privileged
 
     steps:
       - name: Checkout repo
@@ -33,8 +29,17 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-maven-
 
-      - name: Setup Testcontainers networking
-        run: echo "TESTCONTAINERS_HOST_OVERRIDE=host.testcontainers.internal" >> $GITHUB_ENV
+      - name: Configure Docker Host
+        run: |
+          echo "DOCKER_HOST=unix:///var/run/docker.sock" >> $GITHUB_ENV
+          echo "TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE=/var/run/docker.sock" >> $GITHUB_ENV
+          echo "TESTCONTAINERS_HOST_OVERRIDE=localhost" >> $GITHUB_ENV
+
+      - name: Configure DNS for TestContainers
+        run: |
+          sudo sh -c 'echo "127.0.0.1 host.testcontainers.internal" >> /etc/hosts'
+          sudo sh -c 'echo "127.0.0.1 host.docker.internal" >> /etc/hosts'
+          cat /etc/hosts
 
       - name: Build and run tests
-        run: mvn clean verify
+        run: mvn clean verify -Dtestcontainers.ryuk.disabled=true
