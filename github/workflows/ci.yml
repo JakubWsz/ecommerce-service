@@ -34,7 +34,7 @@ jobs:
             ${{ runner.os }}-maven-
 
       - name: Setup Testcontainers networking
-        run: echo "TESTCONTAINERS_HOST_OVERRIDE=host.testcontainers.internal" >> $GITHUB_ENV
+        run: echo "TESTCONTAINERS_HOST_OVERRIDE=$(ip route | awk '/default/ { print $3 }')" >> $GITHUB_ENV
 
       - name: Build and run tests
         run: mvn clean verify
