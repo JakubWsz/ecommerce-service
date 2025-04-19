@@ -8,7 +8,7 @@ on:
 
 jobs:
   build:
-    name: Buduj i testuj
+    name: build and test
     runs-on: ubuntu-latest
 
     steps:
@@ -18,7 +18,7 @@ jobs:
       - name: Setup JDK 21 (Azul)
         uses: actions/setup-java@v3
         with:
-          distribution: azul
+          distribution: zulu
           java-version: '21'
 
       - name: Cache Maven dependencies
