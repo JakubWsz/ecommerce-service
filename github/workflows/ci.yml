@@ -10,6 +10,10 @@ jobs:
   build:
     name: build and test
     runs-on: ubuntu-latest
+    services:
+      docker:
+        image: docker:dind
+        options: --privileged
 
     steps:
       - name: Checkout repo
@@ -29,11 +33,9 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-maven-
 
-      - name: Start Kafka and Zookeeper
-        run: docker-compose -f docker/docker-compose.yml up -d
-
-      - name: Wait for Kafka to be ready
-        run: sleep 15
+      - name: Set Testcontainers host override
+        run: |
+          echo "TESTCONTAINERS_HOST_OVERRIDE=$(ip route | awk '/default/ { print $3 }')" >> $GITHUB_ENV
 
       - name: Build and run tests
         run: mvn clean verify
