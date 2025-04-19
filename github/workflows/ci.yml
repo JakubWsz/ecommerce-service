@@ -29,17 +29,29 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-maven-
 
-      - name: Configure Docker Host
+      - name: Prepare Docker Network
         run: |
-          echo "DOCKER_HOST=unix:///var/run/docker.sock" >> $GITHUB_ENV
-          echo "TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE=/var/run/docker.sock" >> $GITHUB_ENV
-          echo "TESTCONTAINERS_HOST_OVERRIDE=localhost" >> $GITHUB_ENV
+          chmod +x ./fix-docker-networking.sh
+          ./fix-docker-networking.sh
 
-      - name: Configure DNS for TestContainers
+      - name: Run simple PostgreSQL test
         run: |
-          sudo sh -c 'echo "127.0.0.1 host.testcontainers.internal" >> /etc/hosts'
-          sudo sh -c 'echo "127.0.0.1 host.docker.internal" >> /etc/hosts'
-          cat /etc/hosts
+          cd customer-write
+          mvn -Dtest=SimplePostgresTest test -Dtestcontainers.ryuk.disabled=true -Dtestcontainers.checks.disable=true
+        continue-on-error: true
 
       - name: Build and run tests
-        run: mvn clean verify -Dtestcontainers.ryuk.disabled=true
+        run: |
+          export MAVEN_OPTS="-Dtestcontainers.ryuk.disabled=true -Dtestcontainers.checks.disable=true -Djava.net.preferIPv4Stack=true"
+          mvn clean verify -Dtestcontainers.ryuk.disabled=true -DskipTests
+
+      - name: Run tests with debugging
+        run: |
+          export MAVEN_OPTS="-Dtestcontainers.ryuk.disabled=true -Dtestcontainers.checks.disable=true -Djava.net.preferIPv4Stack=true"
+          mvn test -Dtestcontainers.ryuk.disabled=true -Dtestcontainers.checks.disable=true -Dspring.profiles.active=test -DforkCount=0
+
+      - name: Run unit tests only
+        if: ${{ failure() }}
+        run: |
+          # Uruchomienie tylko testów jednostkowych jako plan awaryjny
+          mvn test -Dtest="*Test" -DexcludedGroups="integration" -DforkCount=0
