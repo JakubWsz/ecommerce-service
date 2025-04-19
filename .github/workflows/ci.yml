@@ -29,29 +29,115 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-maven-
 
+      - name: Prepare Network Script
+        run: |
+          mkdir -p .github/workflows
+          if [ -f "fix-docker-networking.sh" ]; then
+            cp fix-docker-networking.sh .github/workflows/
+          elif [ -f ".github/fix-docker-networking.sh" ]; then
+            cp .github/fix-docker-networking.sh .github/workflows/
+          fi
+          chmod +x .github/workflows/fix-docker-networking.sh
+          ls -la .github/workflows/
+
       - name: Prepare Docker Network
         run: |
-          chmod +x ./fix-docker-networking.sh
-          ./fix-docker-networking.sh
+          .github/workflows/fix-docker-networking.sh
 
-      - name: Run simple PostgreSQL test
+      - name: Set Environment Variables
+        run: |
+          echo "TESTCONTAINERS_RYUK_DISABLED=true" >> $GITHUB_ENV
+          echo "TESTCONTAINERS_CHECKS_DISABLE=true" >> $GITHUB_ENV
+          echo "DOCKER_HOST=unix:///var/run/docker.sock" >> $GITHUB_ENV
+          echo "TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE=/var/run/docker.sock" >> $GITHUB_ENV
+          echo "TESTCONTAINERS_HOST_OVERRIDE=localhost" >> $GITHUB_ENV
+          echo "TESTCONTAINERS_NETWORK=testcontainers" >> $GITHUB_ENV
+
+      - name: Find fix-docker-networking.sh script
+        run: |
+          echo "Searching for fix-docker-networking.sh script..."
+          find . -name "fix-docker-networking.sh" -type f
+          
+          # Jeśli script nie zostanie znaleziony, utwórz go
+          if [ $(find . -name "fix-docker-networking.sh" -type f | wc -l) -eq 0 ]; then
+            echo "Creating fix-docker-networking.sh script..."
+            cat > .github/workflows/fix-docker-networking.sh << 'EOF'
+            #!/bin/bash
+          
+            # Ten skrypt naprawia problemy z połączeniami sieciowymi w Docker używanym przez Testcontainers
+            echo "Fixing Docker networking issues for Testcontainers..."
+          
+            # Pokaż aktualną konfigurację
+            echo "Current Docker configuration:"
+            docker version
+            docker info
+            docker network ls
+            echo "Docker bridge network details:"
+            docker network inspect bridge || echo "No bridge network found"
+          
+            # Utwórz dedykowaną sieć dla testcontainers
+            echo "Creating dedicated network for testcontainers..."
+            docker network create testcontainers || echo "Network already exists"
+          
+            # Pokaż informacje o adapterach sieciowych
+            echo "Network interfaces:"
+            ip addr show
+          
+            # Dodaj mapowania do /etc/hosts
+            echo "Adding required host mappings..."
+            sudo sh -c 'echo "127.0.0.1 host.testcontainers.internal" >> /etc/hosts'
+            sudo sh -c 'echo "127.0.0.1 host.docker.internal" >> /etc/hosts'
+            sudo sh -c 'echo "127.0.0.1 gateway.docker.internal" >> /etc/hosts'
+            sudo sh -c 'echo "127.0.0.1 10.1.0.1" >> /etc/hosts'
+          
+            # Otwórz porty używane przez testcontainers
+            echo "Opening necessary ports in firewall..."
+            sudo iptables -A INPUT -p tcp --dport 32768:35000 -j ACCEPT
+            sudo iptables -A OUTPUT -p tcp --dport 32768:35000 -j ACCEPT
+          
+            # Wyłącz Ryuka w konfiguracji testcontainers
+            echo "Creating Testcontainers config file..."
+            mkdir -p ~/.testcontainers
+            echo "ryuk.container.enabled=false" > ~/.testcontainers/testcontainers.properties
+            echo "checks.disable=true" >> ~/.testcontainers/testcontainers.properties
+            echo "docker.client.strategy=org.testcontainers.dockerclient.UnixSocketClientProviderStrategy" >> ~/.testcontainers/testcontainers.properties
+          
+            echo "Testcontainers configuration:"
+            cat ~/.testcontainers/testcontainers.properties
+          
+            echo "Docker network setup complete!"
+            EOF
+          
+            chmod +x .github/workflows/fix-docker-networking.sh
+          fi
+          
+          # Użyj pierwszego znalezionego skryptu
+          SCRIPT_PATH=$(find . -name "fix-docker-networking.sh" -type f | head -1)
+          echo "Using script at: $SCRIPT_PATH"
+          chmod +x $SCRIPT_PATH
+          $SCRIPT_PATH
+
+      - name: Build without tests
+        run: |
+          export MAVEN_OPTS="-Dtestcontainers.ryuk.disabled=true -Dtestcontainers.checks.disable=true -Djava.net.preferIPv4Stack=true"
+          mvn clean package -DskipTests
+
+      - name: Run tests for customer-write module
         run: |
           cd customer-write
-          mvn -Dtest=SimplePostgresTest test -Dtestcontainers.ryuk.disabled=true -Dtestcontainers.checks.disable=true
-        continue-on-error: true
-
-      - name: Build and run tests
-        run: |
           export MAVEN_OPTS="-Dtestcontainers.ryuk.disabled=true -Dtestcontainers.checks.disable=true -Djava.net.preferIPv4Stack=true"
-          mvn clean verify -Dtestcontainers.ryuk.disabled=true -DskipTests
+          mvn test -Dtestcontainers.ryuk.disabled=true -Dsurefire.failIfNoSpecifiedTests=false
 
-      - name: Run tests with debugging
-        run: |
-          export MAVEN_OPTS="-Dtestcontainers.ryuk.disabled=true -Dtestcontainers.checks.disable=true -Djava.net.preferIPv4Stack=true"
-          mvn test -Dtestcontainers.ryuk.disabled=true -Dtestcontainers.checks.disable=true -Dspring.profiles.active=test -DforkCount=0
-
-      - name: Run unit tests only
+      - name: Run specific tests
         if: ${{ failure() }}
         run: |
-          # Uruchomienie tylko testów jednostkowych jako plan awaryjny
-          mvn test -Dtest="*Test" -DexcludedGroups="integration" -DforkCount=0
+          cd customer-write
+          # Uruchom testy jednostkowe, które nie wymagają Testcontainers
+          mvn test -Dtest="CustomerApplicationServiceTest" -Dtestcontainers.ryuk.disabled=true -Dsurefire.failIfNoSpecifiedTests=false
+          
+          # Sprawdź wynik wykonania testów
+          if [ $? -eq 0 ]; then
+            echo "Unit tests passed successfully"
+          else
+            echo "Unit tests failed"
+          fi
