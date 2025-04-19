@@ -29,5 +29,11 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-maven-
 
-      - name: Build i testy
+      - name: Start Kafka and Zookeeper
+        run: docker-compose -f docker/docker-compose.yml up -d
+
+      - name: Wait for Kafka to be ready
+        run: sleep 15
+
+      - name: Build and run tests
         run: mvn clean verify
