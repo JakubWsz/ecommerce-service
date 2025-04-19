@@ -31,7 +31,6 @@ public abstract class DomainEventHandler {
 
 	protected final ObjectMapper objectMapper;
 	protected final TopicsProvider topicsProvider;
-	protected final String applicationName;
 
 	@Autowired(required = false)
 	private DlqMetrics dlqMetrics;
