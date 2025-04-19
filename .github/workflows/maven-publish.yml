@@ -10,6 +10,10 @@ jobs:
   build:
     name: build and test
     runs-on: ubuntu-latest
+    services:
+      docker:
+        image: docker:dind
+        options: --privileged
 
     steps:
       - name: Checkout repo
@@ -29,5 +33,9 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-maven-
 
-      - name: Build i testy
+      - name: Set Testcontainers host override
+        run: |
+          echo "TESTCONTAINERS_HOST_OVERRIDE=$(ip route | awk '/default/ { print $3 }')" >> $GITHUB_ENV
+
+      - name: Build and run tests
         run: mvn clean verify
