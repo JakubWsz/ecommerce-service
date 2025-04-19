@@ -45,9 +45,6 @@ class CustomerControllerTest {
 	@Autowired
 	CustomerRepository customerRepository;
 
-	@Autowired
-	JdbcTemplate jdbcTemplate;
-
 	@Container
 	static PostgreSQLContainer<?> postgresContainer = new PostgreSQLContainer<>(DockerImageName.parse("postgres:16-alpine"))
 			.withDatabaseName("customer_event_store")
@@ -87,14 +84,6 @@ class CustomerControllerTest {
 				.baseUrl("http://localhost:" + port + "/api/v1/customers")
 				.responseTimeout(Duration.ofSeconds(30))
 				.build();
-	}
-
-	@BeforeEach
-	void cleanupDatabase() {
-		jdbcTemplate.execute("DELETE FROM customer_snapshots");
-		jdbcTemplate.execute("DELETE FROM event_store");
-		jdbcTemplate.execute("ALTER SEQUENCE event_store_id_seq RESTART WITH 1");
-		jdbcTemplate.execute("ALTER SEQUENCE customer_snapshots_id_seq RESTART WITH 1");
 	}
 
 	@Test
