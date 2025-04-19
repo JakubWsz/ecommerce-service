@@ -31,6 +31,17 @@ public class RemoveShippingAddressCommandHandler implements CommandHandler<Remov
 
 		if (aggregate.getDefaultShippingAddressId() != null &&
 				aggregate.getDefaultShippingAddressId().equals(command.addressId())) {
+
+			if (aggregate.getShippingAddresses().size() == 1) {
+				helper.applyChange(new CustomerAddressRemovedEvent(
+						aggregate.getId(),
+						command.addressId(),
+						Instant.now(),
+						aggregate.getVersion()
+				));
+				return;
+			}
+
 			throw new CannotRemoveDefaultAddressException(command.addressId());
 		}
 

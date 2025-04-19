@@ -8,7 +8,7 @@ import org.apache.kafka.clients.producer.ProducerRecord;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.kafka.support.SendResult;
 import org.springframework.stereotype.Component;
-import pl.ecommerce.commons.event.DomainEvent;
+import pl.ecommerce.commons.event.AbstractDomainEvent;
 import pl.ecommerce.commons.event.Message;
 import reactor.core.publisher.Mono;
 
@@ -22,19 +22,19 @@ public class EventPublisher {
 	private final KafkaTemplate<String, String> kafkaTemplate;
 	private final ObjectMapper objectMapper;
 
-	public Mono<Void> publish(DomainEvent event) {
+	public Mono<Void> publish(AbstractDomainEvent event) {
 		return publish(event, null, null);
 	}
 
-	public Mono<Void> publish(DomainEvent event, String key) {
+	public Mono<Void> publish(AbstractDomainEvent event, String key) {
 		return publish(event, null, key);
 	}
 
-	public Mono<Void> publish(DomainEvent event, Integer partition) {
+	public Mono<Void> publish(AbstractDomainEvent event, Integer partition) {
 		return publish(event, partition, null);
 	}
 
-	public Mono<Void> publish(DomainEvent event, Integer partition, String key) {
+	public Mono<Void> publish(AbstractDomainEvent event, Integer partition, String key) {
 		if (!event.getClass().isAnnotationPresent(Message.class)) {
 			log.warn("Event {} does not have @Message annotation and will not be sent",
 					event.getClass().getSimpleName());

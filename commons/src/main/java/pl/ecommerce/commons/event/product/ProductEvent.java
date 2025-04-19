@@ -29,11 +29,6 @@ public abstract class ProductEvent extends AbstractDomainEvent {
 	}
 
 	@Override
-	public String getAggregateType() {
-		return "Product";
-	}
-
-	@Override
 	public int getVersion() {
 		return version;
 	}

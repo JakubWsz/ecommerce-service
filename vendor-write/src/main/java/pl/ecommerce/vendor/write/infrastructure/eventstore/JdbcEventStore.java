@@ -9,9 +9,8 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
-import pl.ecommerce.commons.event.DomainEvent;
+import pl.ecommerce.commons.event.AbstractDomainEvent;
 import pl.ecommerce.commons.kafka.EventPublisher;
-import pl.ecommerce.commons.tracing.TracingContext;
 import pl.ecommerce.vendor.write.infrastructure.exception.EventStoreException;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -22,7 +21,6 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.util.List;
-import java.util.Objects;
 import java.util.UUID;
 
 @Repository
@@ -46,11 +44,11 @@ public class JdbcEventStore implements EventStore {
 
 	@Override
 	@Transactional
-	public Mono<Void> saveEvents(UUID aggregateId, List<DomainEvent> events) {
+	public Mono<Void> saveEvents(UUID aggregateId, List<AbstractDomainEvent> events) {
 		return Mono.fromCallable(() -> {
 					try {
 						Integer currentVersion = getCurrentVersion(aggregateId);
-						for (DomainEvent event : events) {
+						for (AbstractDomainEvent event : events) {
 							currentVersion = saveSingleVendorEvent(aggregateId, currentVersion, event);
 						}
 						return events;
@@ -67,7 +65,7 @@ public class JdbcEventStore implements EventStore {
 
 
 	@Override
-	public Flux<DomainEvent> getEvents(UUID aggregateId) {
+	public Flux<AbstractDomainEvent> getEvents(UUID aggregateId) {
 		return Mono.fromCallable(() -> {
 					try {
 						return jdbcTemplate.query(SELECT_EVENTS_SQL, new EventRowMapper(), aggregateId);
@@ -100,14 +98,14 @@ public class JdbcEventStore implements EventStore {
 	}
 
 
-	private class EventRowMapper implements RowMapper<DomainEvent> {
+	private class EventRowMapper implements RowMapper<AbstractDomainEvent> {
 		@Override
-		public DomainEvent mapRow(ResultSet rs, int rowNum) throws SQLException {
+		public AbstractDomainEvent mapRow(ResultSet rs, int rowNum) throws SQLException {
 			try {
 				String eventType = rs.getString("event_type");
 				String eventData = rs.getString("event_data");
 
-				Class<? extends DomainEvent> eventClass = getEventClass(eventType);
+				Class<? extends AbstractDomainEvent> eventClass = getEventClass(eventType);
 				return objectMapper.readValue(eventData, eventClass);
 			} catch (IOException | ClassNotFoundException e) {
 				throw new SQLException("Failed to deserialize event", e);
@@ -115,13 +113,13 @@ public class JdbcEventStore implements EventStore {
 		}
 
 		@SuppressWarnings("unchecked")
-		private Class<? extends DomainEvent> getEventClass(String eventType) throws ClassNotFoundException {
+		private Class<? extends AbstractDomainEvent> getEventClass(String eventType) throws ClassNotFoundException {
 			String eventPackage = "pl.ecommerce.commons.event.vendor.";
-			return (Class<? extends DomainEvent>) Class.forName(eventPackage + eventType);
+			return (Class<? extends AbstractDomainEvent>) Class.forName(eventPackage + eventType);
 		}
 	}
 
-	private int saveSingleVendorEvent(UUID aggregateId, int currentVersion, DomainEvent event) {
+	private int saveSingleVendorEvent(UUID aggregateId, int currentVersion, AbstractDomainEvent event) {
 		String aggregateType = determineAggregateType(event);
 		try {
 			String eventData = objectMapper.writeValueAsString(event);
@@ -156,7 +154,7 @@ public class JdbcEventStore implements EventStore {
 		}
 	}
 
-	private String determineAggregateType(DomainEvent event) {
+	private String determineAggregateType(AbstractDomainEvent event) {
 		String eventClassName = event.getClass().getSimpleName();
 		if (eventClassName.startsWith("Vendor")) {
 			return "Vendor";
@@ -165,7 +163,7 @@ public class JdbcEventStore implements EventStore {
 		return eventClassName.replace("Event", "");
 	}
 
-	private Mono<Void> publishEventToKafka(DomainEvent event) {
+	private Mono<Void> publishEventToKafka(AbstractDomainEvent event) {
 		return publisher.publish(event, event.getAggregateId().toString())
 				.doOnError(ex ->
 						log.error("Failed to send event to Kafka: type={}, aggregateId={}, error={}",

@@ -7,10 +7,12 @@ import org.springframework.dao.DataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
-import pl.ecommerce.commons.event.DomainEvent;
+import pl.ecommerce.commons.event.AbstractDomainEvent;
 import pl.ecommerce.commons.kafka.EventPublisher;
 import pl.ecommerce.customer.write.domain.aggregate.CustomerAggregate;
 import pl.ecommerce.customer.write.infrastructure.eventstore.EventStore;
+import pl.ecommerce.customer.write.infrastructure.exception.ConcurrencyException;
+import pl.ecommerce.customer.write.infrastructure.exception.CustomerNotFoundException;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
@@ -29,40 +31,63 @@ public class EventSourcedCustomerRepository implements CustomerRepository {
 	private final JdbcTemplate jdbcTemplate;
 
 	@Override
-//  @Transactional // Na razie pozostaw zakomentowane dla testu contextCapture
 	public Mono<CustomerAggregate> save(CustomerAggregate customer) {
-		List<DomainEvent> uncommittedEvents = customer.getUncommittedEvents();
+		List<AbstractDomainEvent> uncommittedEvents = customer.getUncommittedEvents();
 
 		if (uncommittedEvents.isEmpty()) {
 			return Mono.just(customer);
 		}
 
 		return Mono.deferContextual(contextView -> {
-					logContext(">>> Context at start of save.deferContextual", contextView);
+			logContext(">>> Context at start of save.deferContextual", contextView);
 
-					Mono<CustomerAggregate> operationChain = Mono.fromCallable(() -> {
-								logContext(">>> Context before persistEvents (inside fromCallable)");
-								return persistEvents(customer, uncommittedEvents);
-							})
-							.subscribeOn(Schedulers.boundedElastic())
-							.flatMap(savedCustomer -> {
-								logContext(">>> Context before publishEvents (inside flatMap)");
-								return publishEvents(uncommittedEvents)
-										.then(Mono.fromRunnable(savedCustomer::clearUncommittedEvents))
-										.thenReturn(savedCustomer);
-							});
+			return Mono.fromCallable(() -> {
+						if (loadCustomerAggregate(customer.getId()) == null) {
+							return customer;
+						}
 
-					return operationChain.contextCapture();
+						CustomerAggregate freshAggregate = new CustomerAggregate(
+								eventStore.getEventsForAggregate(customer.getId())
+						);
 
-				}
-		);
+						for (AbstractDomainEvent event : new ArrayList<>(uncommittedEvents)) {
+							freshAggregate.getHelper().applyChange(event);
+						}
+
+						return freshAggregate;
+					})
+					.subscribeOn(Schedulers.boundedElastic())
+					.flatMap(aggregateToSave -> {
+						logContext(">>> Context before persistEvents (inside fromCallable)");
+
+						return Mono.fromCallable(() -> {
+									int expectedVersion = aggregateToSave.getVersion() - uncommittedEvents.size();
+									eventStore.saveEvents(aggregateToSave.getId(), uncommittedEvents, expectedVersion);
+									return aggregateToSave;
+								})
+								.subscribeOn(Schedulers.boundedElastic())
+								.flatMap(savedAggregate -> {
+									logContext(">>> Context before publishEvents (inside flatMap)");
+									return publishEvents(uncommittedEvents)
+											.then(Mono.fromRunnable(savedAggregate::clearUncommittedEvents))
+											.thenReturn(savedAggregate);
+								});
+					})
+					.retry(3)
+					.onErrorResume(ConcurrencyException.class, ex -> {
+						log.warn("Concurrency error occurred during save, retrying with fresh aggregate: {}", ex.getMessage());
+						return Mono.error(ex);
+					})
+					.contextCapture();
+		});
 	}
 
 	@Override
 	@Transactional(readOnly = true)
 	public Mono<CustomerAggregate> findById(UUID customerId) {
 		return Mono.fromCallable(() -> loadCustomerAggregate(customerId))
-				.filter(Objects::nonNull);
+				.filter(Objects::nonNull)
+				.switchIfEmpty(Mono.error(new CustomerNotFoundException("Customer not found with ID: " + customerId)));
 	}
 
 	@Override
@@ -96,13 +121,15 @@ public class EventSourcedCustomerRepository implements CustomerRepository {
 		});
 	}
 
-	private CustomerAggregate persistEvents(CustomerAggregate customer, List<DomainEvent> events) {
+	private CustomerAggregate persistEvents(CustomerAggregate customer, List<AbstractDomainEvent> events) {
 		logContext(">>> Context at start of persistEvents (on BoundedElastic?)");
 
 		int expectedVersion = customer.getVersion() - events.size();
 
 		try {
 			eventStore.saveEvents(customer.getId(), events, expectedVersion);
+
+			customer.setVersion(customer.getVersion() + events.size());
 		} catch (Exception e) {
 			log.error("Exception occurred during eventStore.saveEvents for aggregate {}: {}",
 					customer.getId(), e.getMessage(), e);
@@ -112,8 +139,12 @@ public class EventSourcedCustomerRepository implements CustomerRepository {
 		return customer;
 	}
 
-	private Mono<Void> publishEvents(List<DomainEvent> events) {
+	private Mono<Void> publishEvents(List<AbstractDomainEvent> events) {
 		logContext(">>> Context at start of publishEvents method");
+
+		if (events.isEmpty()) {
+			return Mono.empty();
+		}
 
 		return Flux.fromIterable(events)
 				.flatMap(event -> {
@@ -148,7 +179,7 @@ public class EventSourcedCustomerRepository implements CustomerRepository {
 
 	private CustomerAggregate loadCustomerAggregate(UUID customerId) {
 		try {
-			List<DomainEvent> events = eventStore.getEventsForAggregate(customerId);
+			List<AbstractDomainEvent> events = eventStore.getEventsForAggregate(customerId);
 			if (events.isEmpty()) {
 				log.debug("No events found for customer: {}", customerId);
 				return null;

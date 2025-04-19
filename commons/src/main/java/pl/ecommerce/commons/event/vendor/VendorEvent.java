@@ -27,11 +27,6 @@ public abstract class VendorEvent extends AbstractDomainEvent {
 	}
 
 	@Override
-	public String getAggregateType() {
-		return "Vendor";
-	}
-
-	@Override
 	public int getVersion() {
 		return version;
 	}

@@ -4,11 +4,12 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.postgresql.util.PGobject;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
-import pl.ecommerce.commons.event.DomainEvent;
+import pl.ecommerce.commons.event.AbstractDomainEvent;
 import pl.ecommerce.customer.write.infrastructure.exception.ConcurrencyException;
 import pl.ecommerce.customer.write.infrastructure.exception.EventStoreException;
 
@@ -29,7 +30,7 @@ public class JdbcEventStore implements EventStore {
 
 	@Override
 	@Transactional(propagation = Propagation.REQUIRED)
-	public void saveEvents(UUID aggregateId, List<DomainEvent> events, int expectedVersion) {
+	public void saveEvents(UUID aggregateId, List<AbstractDomainEvent> events, int expectedVersion) {
 		int currentVersion = getCurrentVersion(aggregateId);
 
 		if (expectedVersion != -1 && currentVersion != expectedVersion) {
@@ -38,20 +39,20 @@ public class JdbcEventStore implements EventStore {
 					aggregateId, expectedVersion, currentVersion));
 		}
 
-		for (DomainEvent event : events) {
+		for (AbstractDomainEvent event : events) {
 			currentVersion = saveSingleEvent(aggregateId, currentVersion, event);
 		}
 	}
 
 	@Override
 	@Transactional(readOnly = true)
-	public List<DomainEvent> getEventsForAggregate(UUID aggregateId) {
+	public List<AbstractDomainEvent> getEventsForAggregate(UUID aggregateId) {
 		List<Map<String, Object>> rows = jdbcTemplate.queryForList(
 				"SELECT * FROM event_store WHERE aggregate_id = ? AND deleted = false ORDER BY version ASC",
 				aggregateId
 		);
 
-		List<DomainEvent> events = new ArrayList<>();
+		List<AbstractDomainEvent> events = new ArrayList<>();
 		for (Map<String, Object> row : rows) {
 			events.add(processEventRow(row));
 		}
@@ -76,7 +77,7 @@ public class JdbcEventStore implements EventStore {
 		return Objects.nonNull(version) ? version : 0;
 	}
 
-	private int saveSingleEvent(UUID aggregateId, int currentVersion, DomainEvent event) {
+	private int saveSingleEvent(UUID aggregateId, int currentVersion, AbstractDomainEvent event) {
 		String aggregateType = determineAggregateType(event);
 		try {
 			String eventData = objectMapper.writeValueAsString(event);
@@ -105,7 +106,7 @@ public class JdbcEventStore implements EventStore {
 		}
 	}
 
-	private String determineAggregateType(DomainEvent event) {
+	private String determineAggregateType(AbstractDomainEvent event) {
 		String eventClassName = event.getClass().getSimpleName();
 		if (eventClassName.startsWith("Customer")) {
 			return "Customer";
@@ -114,10 +115,23 @@ public class JdbcEventStore implements EventStore {
 		return eventClassName.replace("Event", "");
 	}
 
-	private DomainEvent processEventRow(Map<String, Object> row) {
+	private AbstractDomainEvent processEventRow(Map<String, Object> row) {
 		try {
 			String eventType = (String) row.get("event_type");
-			String eventData = (String) row.get("event_data");
+			Object eventDataObj = row.get("event_data");
+			String eventData;
+
+			if (Objects.nonNull(eventDataObj)) {
+				if (eventDataObj instanceof PGobject pgObject) {
+					eventData = pgObject.getValue();
+				} else if (eventDataObj instanceof String) {
+					eventData = (String) eventDataObj;
+				} else {
+					eventData = eventDataObj.toString();
+				}
+			} else {
+				eventData = null;
+			}
 
 			return deserializeEvent(eventType, eventData);
 		} catch (Exception e) {
@@ -126,7 +140,7 @@ public class JdbcEventStore implements EventStore {
 		}
 	}
 
-	private DomainEvent deserializeEvent(String eventType, String eventData) throws JsonProcessingException {
+	private AbstractDomainEvent deserializeEvent(String eventType, String eventData) throws JsonProcessingException {
 		Class<?> eventClass;
 
 		try {
@@ -139,6 +153,6 @@ public class JdbcEventStore implements EventStore {
 			}
 		}
 
-		return (DomainEvent) objectMapper.readValue(eventData, eventClass);
+		return (AbstractDomainEvent) objectMapper.readValue(eventData, eventClass);
 	}
 }

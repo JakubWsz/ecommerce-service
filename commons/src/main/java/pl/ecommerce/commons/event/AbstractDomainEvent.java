@@ -35,7 +35,7 @@ import java.util.UUID;
 		@JsonSubTypes.Type(value = VendorUpdatedEvent.class, name = "VendorUpdatedEvent"),
 		@JsonSubTypes.Type(value = VendorVerificationCompletedEvent.class, name = "VendorVerificationCompletedEvent")
 })
-public abstract class AbstractDomainEvent implements DomainEvent {
+public abstract class AbstractDomainEvent {
 	private final UUID eventId;
 	private final Instant timestamp;
 
@@ -44,8 +44,12 @@ public abstract class AbstractDomainEvent implements DomainEvent {
 		this.timestamp = Instant.now();
 	}
 
-	@Override
 	public String getEventType() {
 		return this.getClass().getSimpleName();
 	}
+
+	public abstract UUID getAggregateId();
+
+	public abstract int getVersion();
+
 }

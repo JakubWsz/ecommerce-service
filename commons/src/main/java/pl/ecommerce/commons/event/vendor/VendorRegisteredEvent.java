@@ -1,8 +1,6 @@
 package pl.ecommerce.commons.event.vendor;
 
 import lombok.*;
-import pl.ecommerce.commons.event.AbstractDomainEvent;
-import pl.ecommerce.commons.event.DomainEvent;
 import pl.ecommerce.commons.event.Message;
 import pl.ecommerce.commons.model.vendor.VendorStatus;
 

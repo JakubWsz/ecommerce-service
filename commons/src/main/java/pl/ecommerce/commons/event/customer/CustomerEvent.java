@@ -28,11 +28,6 @@ public abstract class CustomerEvent extends AbstractDomainEvent {
 	}
 
 	@Override
-	public String getAggregateType() {
-		return "Customer";
-	}
-
-	@Override
 	public int getVersion() {
 		return version;
 	}

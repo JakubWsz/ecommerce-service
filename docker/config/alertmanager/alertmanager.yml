@@ -1,5 +1,9 @@
 global:
   resolve_timeout: 5m
+  smtp_smarthost: 'smtp.example.com:587'
+  smtp_from: 'alertmanager@example.com'
+  smtp_auth_username: 'twoja_nazwa_uzytkownika'
+  smtp_auth_password: 'twoje_haslo'
 
 route:
   receiver: 'default'

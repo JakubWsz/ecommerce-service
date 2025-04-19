@@ -27,11 +27,6 @@ public abstract class OrderEvent extends AbstractDomainEvent {
 	}
 
 	@Override
-	public String getAggregateType() {
-		return "Order";
-	}
-
-	@Override
 	public int getVersion() {
 		return version;
 	}

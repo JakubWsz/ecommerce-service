@@ -1,9 +1,10 @@
 package pl.ecommerce.customer.write.domain.aggregate;
 
 import lombok.Getter;
+import lombok.Setter;
 import pl.ecommerce.commons.command.Command;
 import pl.ecommerce.commons.command.CommandHandler;
-import pl.ecommerce.commons.event.DomainEvent;
+import pl.ecommerce.commons.event.AbstractDomainEvent;
 import pl.ecommerce.commons.event.EventApplier;
 import pl.ecommerce.commons.event.customer.*;
 import pl.ecommerce.commons.model.customer.*;
@@ -35,10 +36,11 @@ public class CustomerAggregate {
 	private CustomerPreferences preferences;
 	private final List<AuthMethod> authMethods = new ArrayList<>();
 	private final Map<String, String> metadata = new HashMap<>();
+	@Setter
 	private int version = 0;
-	private final List<DomainEvent> uncommittedEvents = new ArrayList<>();
+	private final List<AbstractDomainEvent> uncommittedEvents = new ArrayList<>();
 
-	private final Map<Class<? extends DomainEvent>, EventApplier> eventAppliers = new HashMap<>();
+	private final Map<Class<? extends AbstractDomainEvent>, EventApplier> eventAppliers = new HashMap<>();
 	private final Map<Class<?>, CommandHandler<?>> commandHandlers = new HashMap<>();
 
 	public CustomerAggregate(RegisterCustomerCommand command) {
@@ -47,10 +49,15 @@ public class CustomerAggregate {
 		executeCommand(command);
 	}
 
-	public CustomerAggregate(List<DomainEvent> eventHistory) {
+	public CustomerAggregate(List<AbstractDomainEvent> eventHistory) {
 		initializeEventAppliers();
 		initializeCommandHandlers();
-		eventHistory.forEach(this::apply);
+		if (eventHistory != null && !eventHistory.isEmpty()) {
+			for (AbstractDomainEvent event : eventHistory) {
+				apply(event);
+			}
+			this.version = eventHistory.size();
+		}
 	}
 
 	public void updateBasicInfo(UpdateCustomerCommand command) {
@@ -101,13 +108,13 @@ public class CustomerAggregate {
 		uncommittedEvents.clear();
 	}
 
-	protected void applyChange(DomainEvent event) {
+	protected void applyChange(AbstractDomainEvent event) {
 		apply(event);
+		version = version + 1;
 		uncommittedEvents.add(event);
-		version++;
 	}
 
-	protected void apply(DomainEvent event) {
+	protected void apply(AbstractDomainEvent event) {
 		EventApplier applier = eventAppliers.get(event.getClass());
 		if (nonNull(applier)) {
 			applier.apply(event);
@@ -249,6 +256,14 @@ public class CustomerAggregate {
 
 			if (e.isDefault()) {
 				this.defaultShippingAddressId = e.getAddressId();
+			} else if (this.defaultShippingAddressId != null &&
+					this.defaultShippingAddressId.equals(e.getAddressId())) {
+				this.defaultShippingAddressId = null;
+
+				this.shippingAddresses.stream()
+						.filter(addr -> addr.isDefault() && !addr.getId().equals(e.getAddressId()))
+						.findFirst()
+						.ifPresent(addr -> this.defaultShippingAddressId = addr.getId());
 			}
 
 			this.updatedAt = e.getTimestamp();
@@ -303,14 +318,14 @@ public class CustomerAggregate {
 	}
 
 	public interface AggregateHelper {
-		void applyChange(DomainEvent event);
+		void applyChange(AbstractDomainEvent event);
 		void assertCustomerActive();
 	}
 
 	public AggregateHelper getHelper() {
 		return new AggregateHelper() {
 			@Override
-			public void applyChange(DomainEvent event) {
+			public void applyChange(AbstractDomainEvent event) {
 				CustomerAggregate.this.applyChange(event);
 			}
 

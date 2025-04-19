@@ -3,7 +3,7 @@ package pl.ecommerce.vendor.write.domain;
 import lombok.Getter;
 import pl.ecommerce.commons.command.Command;
 import pl.ecommerce.commons.command.CommandHandler;
-import pl.ecommerce.commons.event.DomainEvent;
+import pl.ecommerce.commons.event.AbstractDomainEvent;
 import pl.ecommerce.commons.event.EventApplier;
 import pl.ecommerce.commons.event.vendor.*;
 import pl.ecommerce.commons.model.vendor.VendorStatus;
@@ -37,8 +37,8 @@ public class VendorAggregate {
 	private Instant updatedAt;
 	private int version = 0;
 
-	private final List<DomainEvent> uncommittedEvents = new ArrayList<>();
-	private final Map<Class<? extends DomainEvent>, EventApplier> eventAppliers = new HashMap<>();
+	private final List<AbstractDomainEvent> uncommittedEvents = new ArrayList<>();
+	private final Map<Class<? extends AbstractDomainEvent>, EventApplier> eventAppliers = new HashMap<>();
 	private final Map<Class<? extends Command>, CommandHandler<? extends Command>> commandHandlers = new HashMap<>();
 
 	public VendorAggregate(RegisterVendorCommand command) {
@@ -47,7 +47,7 @@ public class VendorAggregate {
 		executeCommand(command);
 	}
 
-	public VendorAggregate(List<DomainEvent> eventHistory) {
+	public VendorAggregate(List<AbstractDomainEvent> eventHistory) {
 		initializeEventAppliers();
 		initializeCommandHandlers();
 		eventHistory.forEach(this::apply);
@@ -85,13 +85,13 @@ public class VendorAggregate {
 		uncommittedEvents.clear();
 	}
 
-	protected void applyChange(DomainEvent event) {
+	protected void applyChange(AbstractDomainEvent event) {
 		apply(event);
 		uncommittedEvents.add(event);
 		version++;
 	}
 
-	protected void apply(DomainEvent event) {
+	protected void apply(AbstractDomainEvent event) {
 		EventApplier applier = eventAppliers.get(event.getClass());
 		if (applier != null) {
 			applier.apply(event);
@@ -212,14 +212,14 @@ public class VendorAggregate {
 	}
 
 	public interface AggregateHelper {
-		void applyChange(DomainEvent event);
+		void applyChange(AbstractDomainEvent event);
 		void assertVendorActive();
 	}
 
 	public AggregateHelper getHelper() {
 		return new AggregateHelper() {
 			@Override
-			public void applyChange(DomainEvent event) {
+			public void applyChange(AbstractDomainEvent event) {
 				VendorAggregate.this.applyChange(event);
 			}
 

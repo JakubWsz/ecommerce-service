@@ -3,7 +3,6 @@ package pl.ecommerce.commons.event.product;
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.*;
-import pl.ecommerce.commons.event.DomainEvent;
 import pl.ecommerce.commons.event.Message;
 
 import java.math.BigDecimal;

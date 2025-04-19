@@ -6,17 +6,16 @@ import io.opentelemetry.api.trace.Span;
 import io.opentelemetry.api.trace.Tracer;
 import io.opentelemetry.context.Context;
 import io.opentelemetry.context.Scope;
-import io.opentelemetry.context.propagation.TextMapGetter;
 import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.common.header.Header;
-import org.apache.kafka.common.header.Headers;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.kafka.support.Acknowledgment;
-import pl.ecommerce.commons.event.DomainEvent;
+
+import pl.ecommerce.commons.event.AbstractDomainEvent;
 import pl.ecommerce.commons.kafka.dlq.DlqMetrics;
 import pl.ecommerce.commons.tracing.KafkaTracingPropagator;
 
@@ -37,18 +36,18 @@ public abstract class DomainEventHandler {
 	@Autowired(required = false)
 	private DlqMetrics dlqMetrics;
 
-	private final Map<Class<? extends DomainEvent>, java.lang.reflect.Method> handlerMethods = new HashMap<>();
+	private final Map<Class<? extends AbstractDomainEvent>, java.lang.reflect.Method> handlerMethods = new HashMap<>();
 
 	@PostConstruct
 	public void init() {
 		for (java.lang.reflect.Method method : this.getClass().getDeclaredMethods()) {
 			if (method.isAnnotationPresent(EventHandler.class)) {
 				Class<?>[] paramTypes = method.getParameterTypes();
-				if ((paramTypes.length == 1 && DomainEvent.class.isAssignableFrom(paramTypes[0])) ||
-						(paramTypes.length == 2 && DomainEvent.class.isAssignableFrom(paramTypes[0]) &&
+				if ((paramTypes.length == 1 && AbstractDomainEvent.class.isAssignableFrom(paramTypes[0])) ||
+						(paramTypes.length == 2 && AbstractDomainEvent.class.isAssignableFrom(paramTypes[0]) &&
 								Map.class.isAssignableFrom(paramTypes[1]))) {
 					@SuppressWarnings("unchecked")
-					Class<? extends DomainEvent> eventType = (Class<? extends DomainEvent>) paramTypes[0];
+					Class<? extends AbstractDomainEvent> eventType = (Class<? extends AbstractDomainEvent>) paramTypes[0];
 					handlerMethods.put(eventType, method);
 					log.info("Registered handler for event type: {}", eventType.getSimpleName());
 				}
@@ -56,7 +55,7 @@ public abstract class DomainEventHandler {
 		}
 	}
 
-	public boolean processEvent(DomainEvent event, Map<String, String> headers) {
+	public boolean processEvent(AbstractDomainEvent event, Map<String, String> headers) {
 		java.lang.reflect.Method handler = handlerMethods.get(event.getClass());
 		if (nonNull(handler)) {
 			try {
@@ -92,8 +91,8 @@ public abstract class DomainEventHandler {
 		try (Scope scope = consumerSpan.makeCurrent()) {
 			try {
 				Object value = record.value();
-				if (!(value instanceof DomainEvent event)) {
-					log.error("Received message is not a DomainEvent: {}", value);
+				if (!(value instanceof AbstractDomainEvent event)) {
+					log.error("Received message is not a AbstractDomainEvent: {}", value);
 					ack.acknowledge();
 					return;
 				}
