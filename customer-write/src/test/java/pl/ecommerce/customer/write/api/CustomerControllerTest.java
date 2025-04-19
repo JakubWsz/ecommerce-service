@@ -37,6 +37,11 @@ import static pl.ecommerce.commons.model.customer.CustomerStatus.DELETED;
 @ActiveProfiles("test")
 class CustomerControllerTest {
 
+	static {
+		System.setProperty("testcontainers.ryuk.disabled", "true");
+		System.setProperty("testcontainers.reuse.enable", "true");
+	}
+
 	@LocalServerPort
 	private int port;
 
@@ -307,7 +312,7 @@ class CustomerControllerTest {
 				.exchange()
 				.expectStatus().isCreated();
 
-		
+
 		var customer = customerRepository.findByEmail(email).block();
 		assertThat(customer).isNotNull();
 		UUID customerId = customer.getId();
@@ -330,7 +335,7 @@ class CustomerControllerTest {
 				.exchange()
 				.expectStatus().isNoContent();
 
-		
+
 
 		var withSecondAddr = customerRepository.findById(customerId).block();
 		assertThat(withSecondAddr).isNotNull();
@@ -355,7 +360,7 @@ class CustomerControllerTest {
 				.exchange()
 				.expectStatus().isNoContent();
 
-		
+
 
 		var withTwoAddresses = customerRepository.findById(customerId).block();
 		assertThat(withTwoAddresses).isNotNull();
@@ -374,7 +379,7 @@ class CustomerControllerTest {
 				.exchange()
 				.expectStatus().isNoContent();
 
-		
+
 		var afterFirstRemove = customerRepository.findById(customerId).block();
 		assertThat(afterFirstRemove).isNotNull();
 		assertThat(afterFirstRemove.getShippingAddresses()).hasSize(1);
@@ -396,14 +401,14 @@ class CustomerControllerTest {
 				.exchange()
 				.expectStatus().isNoContent();
 
-		
+
 
 		webTestClient.post()
 				.uri(uriBuilder -> uriBuilder.path("/{id}/deactivate").queryParam("reason", "Lifecycle test deactivation").build(customerId))
 				.exchange()
 				.expectStatus().isNoContent();
 
-		
+
 		var deactivated = customerRepository.findById(customerId).block();
 		assertThat(deactivated).isNotNull();
 		assertThat(deactivated.getStatus() == CustomerStatus.ACTIVE).isFalse();
@@ -413,7 +418,7 @@ class CustomerControllerTest {
 				.exchange()
 				.expectStatus().isNoContent();
 
-		
+
 		var deleted = customerRepository.findById(customerId).block();
 		assertThat(deleted.getStatus() == DELETED).isTrue();
 	}
