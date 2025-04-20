@@ -1,5 +1,7 @@
 # Test environment configuration
 spring:
+  main:
+    allow-bean-definition-overriding: true
 
   # JDBC configuration for PostgreSQL with TestContainers
   datasource:
@@ -16,7 +18,7 @@ spring:
 
   # Kafka configuration for tests
   kafka:
-    bootstrap-servers: ${spring.embedded.kafka.brokers:localhost:29092}
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:kafka:9092}
     producer:
       retries: 1
       properties:

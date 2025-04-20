@@ -69,17 +69,17 @@ class CustomerControllerTest {
 		registry.add("spring.datasource.username", postgresContainer::getUsername);
 		registry.add("spring.datasource.password", postgresContainer::getPassword);
 
-		if (nonNull(System.getenv("CI"))) {
+		if (Objects.nonNull(System.getenv("CI"))) {
 			registry.add("spring.kafka.bootstrap-servers", () -> "kafka:9092");
-			log.info(">>>>USE CI CONFIG<<<<<");
+			log.info(">>>>USE CI CONFIG: kafka:9092<<<<<");
 		} else {
 			registry.add("spring.kafka.bootstrap-servers", kafkaContainer::getBootstrapServers);
-			log.info(">>>>USE LOCAL CONFIG<<<<<");
+			log.info(">>>>USE LOCAL CONFIG: {}<<<<<", kafkaContainer.getBootstrapServers());
 		}
 
-		registry.add("spring.kafka.producer.properties.max.block.ms", () -> "5000");
-		registry.add("spring.kafka.producer.properties.request.timeout.ms", () -> "5000");
-		registry.add("spring.kafka.producer.properties.delivery.timeout.ms", () -> "5000");
+		registry.add("spring.kafka.producer.properties.max.block.ms", () -> "10000");
+		registry.add("spring.kafka.producer.properties.request.timeout.ms", () -> "10000");
+		registry.add("spring.kafka.producer.properties.delivery.timeout.ms", () -> "10000");
 		registry.add("management.tracing.enabled", () -> "false");
 	}
 
