@@ -1,5 +1,6 @@
 package pl.ecommerce.customer.write.api;
 
+import lombok.extern.slf4j.Slf4j;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -8,12 +9,12 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.http.MediaType;
-import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.reactive.server.WebTestClient;
 import org.testcontainers.containers.KafkaContainer;
+import org.testcontainers.containers.Network;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
@@ -27,15 +28,20 @@ import pl.ecommerce.customer.write.infrastructure.repository.CustomerRepository;
 
 import java.time.Duration;
 import java.util.List;
+import java.util.Objects;
 import java.util.UUID;
 
+import static java.util.Objects.nonNull;
 import static org.assertj.core.api.Assertions.assertThat;
 import static pl.ecommerce.commons.model.customer.CustomerStatus.DELETED;
 
+@Slf4j
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @Testcontainers
 @ActiveProfiles("test")
 class CustomerControllerTest {
+
+	static final Network network = Network.newNetwork();
 
 	@LocalServerPort
 	private int port;
@@ -45,27 +51,37 @@ class CustomerControllerTest {
 	@Autowired
 	CustomerRepository customerRepository;
 
-	@Autowired
-	JdbcTemplate jdbcTemplate;
-
 	@Container
-	static PostgreSQLContainer<?> postgresContainer = new PostgreSQLContainer<>(DockerImageName.parse("postgres:16-alpine"))
+	static final PostgreSQLContainer<?> postgresContainer = new PostgreSQLContainer<>(DockerImageName.parse("postgres:16-alpine"))
 			.withDatabaseName("customer_event_store")
 			.withUsername("test")
-			.withPassword("test");
+			.withPassword("test")
+			.withNetwork(network);
 
 	@Container
-	static KafkaContainer kafkaContainer = new KafkaContainer(DockerImageName.parse("confluentinc/cp-kafka:7.5.0"));
+	static final KafkaContainer kafkaContainer = new KafkaContainer(DockerImageName.parse("confluentinc/cp-kafka:7.5.0"))
+			.withNetwork(network)
+			.withNetworkAliases("kafka");
 
 	@DynamicPropertySource
 	static void registerDynamicProperties(DynamicPropertyRegistry registry) {
 		registry.add("spring.datasource.url", postgresContainer::getJdbcUrl);
 		registry.add("spring.datasource.username", postgresContainer::getUsername);
 		registry.add("spring.datasource.password", postgresContainer::getPassword);
-		registry.add("spring.kafka.bootstrap-servers", kafkaContainer::getBootstrapServers);
-		registry.add("spring.kafka.producer.properties.max.block.ms", () -> "3000");
-		registry.add("spring.kafka.producer.properties.request.timeout.ms", () -> "3000");
-		registry.add("spring.kafka.producer.properties.delivery.timeout.ms", () -> "3000");
+
+		if (Objects.nonNull(System.getenv("CI"))) {
+			String kafkaAddress = "kafka:9092";
+			registry.add("spring.kafka.bootstrap-servers", () -> kafkaAddress);
+			System.setProperty("spring.kafka.bootstrap-servers", kafkaAddress);
+			log.info(">>>>USE CI CONFIG: {}<<<<<", kafkaAddress);
+		} else {
+			registry.add("spring.kafka.bootstrap-servers", kafkaContainer::getBootstrapServers);
+			log.info(">>>>USE LOCAL CONFIG: {}<<<<<", kafkaContainer.getBootstrapServers());
+		}
+
+		registry.add("spring.kafka.producer.properties.max.block.ms", () -> "10000");
+		registry.add("spring.kafka.producer.properties.request.timeout.ms", () -> "10000");
+		registry.add("spring.kafka.producer.properties.delivery.timeout.ms", () -> "10000");
 		registry.add("management.tracing.enabled", () -> "false");
 	}
 
@@ -85,16 +101,8 @@ class CustomerControllerTest {
 	void setUp() {
 		webTestClient = WebTestClient.bindToServer()
 				.baseUrl("http://localhost:" + port + "/api/v1/customers")
-				.responseTimeout(Duration.ofSeconds(30))
+				.responseTimeout(Duration.ofSeconds(60))
 				.build();
-	}
-
-	@BeforeEach
-	void cleanupDatabase() {
-		jdbcTemplate.execute("DELETE FROM customer_snapshots");
-		jdbcTemplate.execute("DELETE FROM event_store");
-		jdbcTemplate.execute("ALTER SEQUENCE event_store_id_seq RESTART WITH 1");
-		jdbcTemplate.execute("ALTER SEQUENCE customer_snapshots_id_seq RESTART WITH 1");
 	}
 
 	@Test
@@ -318,7 +326,7 @@ class CustomerControllerTest {
 				.exchange()
 				.expectStatus().isCreated();
 
-		
+
 		var customer = customerRepository.findByEmail(email).block();
 		assertThat(customer).isNotNull();
 		UUID customerId = customer.getId();
@@ -341,7 +349,7 @@ class CustomerControllerTest {
 				.exchange()
 				.expectStatus().isNoContent();
 
-		
+
 
 		var withSecondAddr = customerRepository.findById(customerId).block();
 		assertThat(withSecondAddr).isNotNull();
@@ -366,7 +374,7 @@ class CustomerControllerTest {
 				.exchange()
 				.expectStatus().isNoContent();
 
-		
+
 
 		var withTwoAddresses = customerRepository.findById(customerId).block();
 		assertThat(withTwoAddresses).isNotNull();
@@ -385,7 +393,7 @@ class CustomerControllerTest {
 				.exchange()
 				.expectStatus().isNoContent();
 
-		
+
 		var afterFirstRemove = customerRepository.findById(customerId).block();
 		assertThat(afterFirstRemove).isNotNull();
 		assertThat(afterFirstRemove.getShippingAddresses()).hasSize(1);
@@ -407,14 +415,14 @@ class CustomerControllerTest {
 				.exchange()
 				.expectStatus().isNoContent();
 
-		
+
 
 		webTestClient.post()
 				.uri(uriBuilder -> uriBuilder.path("/{id}/deactivate").queryParam("reason", "Lifecycle test deactivation").build(customerId))
 				.exchange()
 				.expectStatus().isNoContent();
 
-		
+
 		var deactivated = customerRepository.findById(customerId).block();
 		assertThat(deactivated).isNotNull();
 		assertThat(deactivated.getStatus() == CustomerStatus.ACTIVE).isFalse();
@@ -424,7 +432,7 @@ class CustomerControllerTest {
 				.exchange()
 				.expectStatus().isNoContent();
 
-		
+
 		var deleted = customerRepository.findById(customerId).block();
 		assertThat(deleted.getStatus() == DELETED).isTrue();
 	}

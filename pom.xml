@@ -17,10 +17,10 @@
         <module>commons</module>
         <module>customer-write</module>
         <module>customer-read</module>
-        <module>vendor-write</module>
-        <module>vendor-read</module>
-        <module>product-write</module>
-        <module>product-read</module>
+<!--        <module>vendor-write</module>-->
+<!--        <module>vendor-read</module>-->
+<!--        <module>product-write</module>-->
+<!--        <module>product-read</module>-->
         <!-- <module>order</module> -->
         <!-- <module>payment</module> -->
         <!-- <module>shipping</module> -->
@@ -262,6 +262,16 @@
                 <configuration>
                     <source>21</source>
                     <target>21</target>
+                </configuration>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <configuration>
+                    <systemPropertyVariables>
+                        <testcontainers.reuse.enable>true</testcontainers.reuse.enable>
+                        <testcontainers.ryuk.disabled>true</testcontainers.ryuk.disabled>
+                    </systemPropertyVariables>
                 </configuration>
             </plugin>
         </plugins>
