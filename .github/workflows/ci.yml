@@ -38,24 +38,42 @@ jobs:
           # Konfiguracja plików hosts
           sudo sh -c 'echo "127.0.0.1 host.testcontainers.internal" >> /etc/hosts'
           sudo sh -c 'echo "127.0.0.1 kafka" >> /etc/hosts'
+          sudo sh -c 'echo "127.0.0.1 zookeeper" >> /etc/hosts'
           
           # Konfiguracja TestContainers
           mkdir -p ~/.testcontainers
           echo "ryuk.container.enabled=false" > ~/.testcontainers/testcontainers.properties
           echo "host.testcontainers.internal.host=localhost" >> ~/.testcontainers/testcontainers.properties
           
-          # Utwórz sieć Docker i uruchom kontener Kafka
+          # Utwórz sieć Docker
           docker network create test-network || true
+          
+          # Uruchom Zookeeper najpierw
+          docker run -d --name zookeeper --hostname zookeeper --network test-network \
+            -p 2181:2181 \
+            -e ZOOKEEPER_CLIENT_PORT=2181 \
+            -e ZOOKEEPER_TICK_TIME=2000 \
+            confluentinc/cp-zookeeper:7.5.0
+          
+          # Poczekaj na uruchomienie Zookeepera
+          sleep 5
+          
+          # Uruchom Kafka
           docker run -d --name kafka --hostname kafka --network test-network \
             -p 9092:9092 \
+            -e KAFKA_BROKER_ID=1 \
+            -e KAFKA_ZOOKEEPER_CONNECT=zookeeper:2181 \
             -e KAFKA_ADVERTISED_LISTENERS=PLAINTEXT://kafka:9092 \
+            -e KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR=1 \
             -e KAFKA_LISTENERS=PLAINTEXT://0.0.0.0:9092 \
             -e KAFKA_AUTO_CREATE_TOPICS_ENABLE=true \
-            -e ALLOW_PLAINTEXT_LISTENER=yes \
             confluentinc/cp-kafka:7.5.0
           
-          # Sprawdź, czy kontener Kafka działa
+          # Sprawdź, czy kontenery działają
           sleep 10
+          echo "=== Zookeeper status ==="
+          docker ps | grep zookeeper
+          echo "=== Kafka status ==="
           docker ps | grep kafka
 
       - name: Build all modules
