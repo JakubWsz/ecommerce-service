@@ -8,12 +8,12 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.http.MediaType;
-import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.reactive.server.WebTestClient;
 import org.testcontainers.containers.KafkaContainer;
+import org.testcontainers.containers.Network;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
@@ -37,10 +37,7 @@ import static pl.ecommerce.commons.model.customer.CustomerStatus.DELETED;
 @ActiveProfiles("test")
 class CustomerControllerTest {
 
-	static {
-		System.setProperty("testcontainers.ryuk.disabled", "true");
-		System.setProperty("testcontainers.reuse.enable", "true");
-	}
+	static final Network network = Network.newNetwork();
 
 	@LocalServerPort
 	private int port;
@@ -54,10 +51,13 @@ class CustomerControllerTest {
 	static PostgreSQLContainer<?> postgresContainer = new PostgreSQLContainer<>(DockerImageName.parse("postgres:16-alpine"))
 			.withDatabaseName("customer_event_store")
 			.withUsername("test")
-			.withPassword("test");
+			.withPassword("test")
+			.withNetwork(network);
 
 	@Container
-	static KafkaContainer kafkaContainer = new KafkaContainer(DockerImageName.parse("confluentinc/cp-kafka:7.5.0"));
+	static KafkaContainer kafkaContainer = new KafkaContainer(DockerImageName.parse("confluentinc/cp-kafka:7.5.0"))
+			.withNetwork(network)
+			.withNetworkAliases("kafka");
 
 	@DynamicPropertySource
 	static void registerDynamicProperties(DynamicPropertyRegistry registry) {
