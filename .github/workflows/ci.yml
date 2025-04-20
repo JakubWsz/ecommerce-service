@@ -26,17 +26,39 @@ jobs:
           java-version: '21'
           cache: 'maven'
 
-      - name: Disable TestContainers Ryuk and configure network
+      - name: Set up Docker network and configure Kafka
         run: |
+          # Ustaw zmienne środowiskowe
+          echo "CI=true" >> $GITHUB_ENV
+          echo "SPRING_PROFILES_ACTIVE=test" >> $GITHUB_ENV
           echo "TESTCONTAINERS_RYUK_DISABLED=true" >> $GITHUB_ENV
+          
+          # Konfiguracja plików hosts
           sudo sh -c 'echo "127.0.0.1 host.testcontainers.internal" >> /etc/hosts'
           sudo sh -c 'echo "127.0.0.1 kafka" >> /etc/hosts'
+          
+          # Konfiguracja TestContainers
           mkdir -p ~/.testcontainers
           echo "ryuk.container.enabled=false" > ~/.testcontainers/testcontainers.properties
           echo "host.testcontainers.internal.host=localhost" >> ~/.testcontainers/testcontainers.properties
+          
+          # Utwórz sieć Docker i uruchom kontener Kafka
+          docker network create test-network || true
+          docker run -d --name kafka --hostname kafka --network test-network \
+            -p 9092:9092 \
+            -e KAFKA_ADVERTISED_LISTENERS=PLAINTEXT://kafka:9092 \
+            -e KAFKA_LISTENERS=PLAINTEXT://0.0.0.0:9092 \
+            -e KAFKA_ZOOKEEPER_CONNECT=localhost:2181 \
+            -e KAFKA_AUTO_CREATE_TOPICS_ENABLE=true \
+            -e ALLOW_PLAINTEXT_LISTENER=yes \
+            confluentinc/cp-kafka:7.5.0
+          
+          # Sprawdź, czy kontener Kafka działa
+          sleep 10
+          docker ps | grep kafka
 
       - name: Build all modules
         run: mvn --batch-mode clean install -DskipTests
 
       - name: Run tests in customer-write
-        run: mvn --batch-mode test -pl customer-write -Dsurefire.failIfNoSpecifiedTests=false -Dtestcontainers.ryuk.disabled=true
+        run: mvn --batch-mode test -pl customer-write -Dsurefire.failIfNoSpecifiedTests=false -Dtestcontainers.ryuk.disabled=true -DCI=true
