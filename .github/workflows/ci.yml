@@ -26,163 +26,17 @@ jobs:
           java-version: '21'
           cache: 'maven'
 
-      - name: Docker configuration
-        run: |
-          # Set up Docker network
-          docker network create testcontainers || true
-          docker network ls
-          
-          # Configure host mappings for Docker containers
-          echo "Configuring host mappings..."
-          sudo sh -c 'echo "127.0.0.1 host.testcontainers.internal" >> /etc/hosts'
-          sudo sh -c 'echo "127.0.0.1 host.docker.internal" >> /etc/hosts'
-          sudo sh -c 'echo "127.0.0.1 10.1.0.1" >> /etc/hosts'
-          cat /etc/hosts
-          
-          # Open required ports
-          sudo iptables -A INPUT -p tcp --dport 32768:35000 -j ACCEPT
-          
-          # Configure TestContainers
-          mkdir -p ~/.testcontainers
-          echo "ryuk.container.enabled=false" > ~/.testcontainers/testcontainers.properties
-          echo "checks.disable=true" >> ~/.testcontainers/testcontainers.properties
-          echo "docker.client.strategy=org.testcontainers.dockerclient.UnixSocketClientProviderStrategy" >> ~/.testcontainers/testcontainers.properties
-          cat ~/.testcontainers/testcontainers.properties
-
-      - name: Pull Docker images
-        run: |
-          docker pull postgres:16-alpine
-          docker pull confluentinc/cp-kafka:7.5.0
-
-      - name: Set environment variables
+      - name: Disable TestContainers Ryuk
         run: |
           echo "TESTCONTAINERS_RYUK_DISABLED=true" >> $GITHUB_ENV
-          echo "TESTCONTAINERS_CHECKS_DISABLE=true" >> $GITHUB_ENV
-          echo "DOCKER_HOST=unix:///var/run/docker.sock" >> $GITHUB_ENV
-          echo "TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE=/var/run/docker.sock" >> $GITHUB_ENV
-          echo "TESTCONTAINERS_HOST_OVERRIDE=localhost" >> $GITHUB_ENV
-          echo "TESTCONTAINERS_NETWORK=testcontainers" >> $GITHUB_ENV
+          sudo sh -c 'echo "127.0.0.1 host.testcontainers.internal" >> /etc/hosts'
+          mkdir -p ~/.testcontainers
+          echo "ryuk.container.enabled=false" > ~/.testcontainers/testcontainers.properties
 
-      - name: Build commons module
-        run: |
-          # Build and install commons first (required dependency)
-          mvn -B clean install -pl commons -DskipTests
+      # Simple full build with skipped tests
+      - name: Build all modules
+        run: mvn --batch-mode clean install -DskipTests
 
-      - name: Create diagnostic test
-        run: |
-          # Create directory for test class
-          mkdir -p customer-write/src/test/java/pl/ecommerce/customer/write/infrastructure
-          
-          # Create test helper class
-          cat > customer-write/src/test/java/pl/ecommerce/customer/write/infrastructure/TestContainersHelper.java << 'EOF'
-          package pl.ecommerce.customer.write.infrastructure;
-          
-          import java.util.Map;
-          import java.util.Objects;
-          
-          import org.junit.jupiter.api.Test;
-          import org.testcontainers.DockerClientFactory;
-          import org.testcontainers.containers.PostgreSQLContainer;
-          import org.testcontainers.junit.jupiter.Container;
-          import org.testcontainers.junit.jupiter.Testcontainers;
-          import org.testcontainers.utility.DockerImageName;
-          
-          import static org.assertj.core.api.Assertions.assertThat;
-          
-          /**
-           * This test class helps diagnose TestContainers issues
-           */
-          @Testcontainers
-          public class TestContainersHelper {
-          
-              static {
-                  System.setProperty("testcontainers.ryuk.disabled", "true");
-                  System.setProperty("testcontainers.checks.disable", "true");
-                  System.setProperty("testcontainers.reuse.enable", "true");
-              }
-          
-              @Container
-              private static final PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>(DockerImageName.parse("postgres:16-alpine"))
-                      .withDatabaseName("diagnostics")
-                      .withUsername("test")
-                      .withPassword("test");
-          
-              @Test
-              void testDockerEnvironment() {
-                  System.out.println("=== Docker Environment Diagnostics ===");
-          
-                  // Check Docker client
-                  System.out.println("Docker client initialized: " + (DockerClientFactory.instance().client() != null));
-          
-                  // Print all environment variables
-                  System.out.println("=== Environment Variables ===");
-                  Map<String, String> env = System.getenv();
-                  env.forEach((key, value) -> {
-                      if (key.startsWith("TESTCONTAINERS") || key.startsWith("DOCKER")) {
-                          System.out.println(key + "=" + value);
-                      }
-                  });
-          
-                  // Print all system properties
-                  System.out.println("=== System Properties ===");
-                  System.getProperties().forEach((key, value) -> {
-                      if (Objects.toString(key).contains("testcontainers") || 
-                          Objects.toString(key).contains("docker")) {
-                          System.out.println(key + "=" + value);
-                      }
-                  });
-          
-                  // Test container
-                  System.out.println("=== Container Test ===");
-                  System.out.println("PostgreSQL container running: " + postgres.isRunning());
-                  System.out.println("PostgreSQL container ID: " + postgres.getContainerId());
-                  System.out.println("PostgreSQL JDBC URL: " + postgres.getJdbcUrl());
-          
-                  // Ensure test passes
-                  assertThat(postgres.isRunning()).isTrue();
-              }
-          }
-          EOF
-
-      - name: Run diagnostic test
-        continue-on-error: true
-        run: |
-          cd customer-write
-          mvn test -Dtest=TestContainersHelper -Dtestcontainers.ryuk.disabled=true -Dsurefire.failIfNoSpecifiedTests=false
-
-      - name: Build customer-write module
-        run: |
-          # Build and install customer-write (without tests)
-          mvn -B clean install -pl customer-write -DskipTests
-
-      - name: Run unit tests
-        run: |
-          # Run only unit tests that don't require TestContainers
-          cd customer-write
-          mvn test -Dtest="pl.ecommerce.customer.write.application.**.*Test" -Dtestcontainers.ryuk.disabled=true -Dsurefire.failIfNoSpecifiedTests=false
-
-      - name: Run integration tests
-        if: ${{ success() }}
-        continue-on-error: true
-        run: |
-          # Run integration tests with TestContainers
-          cd customer-write
-          export MAVEN_OPTS="-Dtestcontainers.ryuk.disabled=true -Dtestcontainers.checks.disable=true -Djava.net.preferIPv4Stack=true"
-          mvn test -Dtest="pl.ecommerce.customer.write.api.**.*Test" -Dtestcontainers.ryuk.disabled=true -Dsurefire.failIfNoSpecifiedTests=false
-
-      - name: Build remaining modules
-        if: ${{ always() }}
-        run: |
-          # Build remaining modules in the project (with tests skipped)
-          mvn -B install -DskipTests -pl '!commons,!customer-write'
-
-      # Using a different approach for artifact uploading
-      - name: Save test reports
-        if: ${{ always() }}
-        run: |
-          mkdir -p test-reports
-          find . -path "*/target/surefire-reports" -type d -exec cp -r {} test-reports/ \;
-          
-          # Display summary of test results
-          echo "=== Test Results Summary ==="
-          find test-reports -name "*.txt" -exec cat {} \; | grep -E "Tests run:|Running "
+      # Run tests in customer-write module only
+      - name: Run tests in customer-write
+        run: mvn --batch-mode test -pl customer-write -Dsurefire.failIfNoSpecifiedTests=false -Dtestcontainers.ryuk.disabled=true
