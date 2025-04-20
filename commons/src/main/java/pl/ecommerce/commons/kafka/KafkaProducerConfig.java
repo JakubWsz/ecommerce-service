@@ -12,6 +12,7 @@ import org.springframework.kafka.core.ProducerFactory;
 
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 @Configuration
@@ -24,14 +25,14 @@ public class KafkaProducerConfig {
 	@Bean
 	public ProducerFactory<String, String> producerFactory() {
 		Map<String, Object> configProps = new HashMap<>();
-		configProps.put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, "localhost:29092");
+		configProps.put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, bootstrapServers);
 		configProps.put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, StringSerializer.class);
 		configProps.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, StringSerializer.class);
 
-		configProps.put(ProducerConfig.INTERCEPTOR_CLASSES_CONFIG, Arrays.asList(
+		configProps.put(ProducerConfig.INTERCEPTOR_CLASSES_CONFIG, List.of(
 				"pl.ecommerce.commons.kafka.CustomKafkaProducerInterceptor"
 		));
-		log.debug("configProps: " + configProps);
+		log.debug("configProps: {}", configProps);
 		return new DefaultKafkaProducerFactory<>(configProps);
 	}
 

@@ -70,8 +70,10 @@ class CustomerControllerTest {
 		registry.add("spring.datasource.password", postgresContainer::getPassword);
 
 		if (Objects.nonNull(System.getenv("CI"))) {
-			registry.add("spring.kafka.bootstrap-servers", () -> "kafka:9092");
-			log.info(">>>>USE CI CONFIG: kafka:9092<<<<<");
+			String kafkaAddress = "kafka:9092";
+			registry.add("spring.kafka.bootstrap-servers", () -> kafkaAddress);
+			System.setProperty("spring.kafka.bootstrap-servers", kafkaAddress);
+			log.info(">>>>USE CI CONFIG: {}<<<<<", kafkaAddress);
 		} else {
 			registry.add("spring.kafka.bootstrap-servers", kafkaContainer::getBootstrapServers);
 			log.info(">>>>USE LOCAL CONFIG: {}<<<<<", kafkaContainer.getBootstrapServers());
