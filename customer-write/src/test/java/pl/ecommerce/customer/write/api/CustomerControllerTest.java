@@ -1,5 +1,6 @@
 package pl.ecommerce.customer.write.api;
 
+import lombok.extern.slf4j.Slf4j;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -27,11 +28,14 @@ import pl.ecommerce.customer.write.infrastructure.repository.CustomerRepository;
 
 import java.time.Duration;
 import java.util.List;
+import java.util.Objects;
 import java.util.UUID;
 
+import static java.util.Objects.nonNull;
 import static org.assertj.core.api.Assertions.assertThat;
 import static pl.ecommerce.commons.model.customer.CustomerStatus.DELETED;
 
+@Slf4j
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @Testcontainers
 @ActiveProfiles("test")
@@ -64,10 +68,18 @@ class CustomerControllerTest {
 		registry.add("spring.datasource.url", postgresContainer::getJdbcUrl);
 		registry.add("spring.datasource.username", postgresContainer::getUsername);
 		registry.add("spring.datasource.password", postgresContainer::getPassword);
-		registry.add("spring.kafka.bootstrap-servers", kafkaContainer::getBootstrapServers);
-		registry.add("spring.kafka.producer.properties.max.block.ms", () -> "3000");
-		registry.add("spring.kafka.producer.properties.request.timeout.ms", () -> "3000");
-		registry.add("spring.kafka.producer.properties.delivery.timeout.ms", () -> "3000");
+
+		if (nonNull(System.getenv("CI"))) {
+			registry.add("spring.kafka.bootstrap-servers", () -> "kafka:9092");
+			log.info(">>>>USE CI CONFIG<<<<<");
+		} else {
+			registry.add("spring.kafka.bootstrap-servers", kafkaContainer::getBootstrapServers);
+			log.info(">>>>USE LOCAL CONFIG<<<<<");
+		}
+
+		registry.add("spring.kafka.producer.properties.max.block.ms", () -> "5000");
+		registry.add("spring.kafka.producer.properties.request.timeout.ms", () -> "5000");
+		registry.add("spring.kafka.producer.properties.delivery.timeout.ms", () -> "5000");
 		registry.add("management.tracing.enabled", () -> "false");
 	}
 
@@ -87,7 +99,7 @@ class CustomerControllerTest {
 	void setUp() {
 		webTestClient = WebTestClient.bindToServer()
 				.baseUrl("http://localhost:" + port + "/api/v1/customers")
-				.responseTimeout(Duration.ofSeconds(30))
+				.responseTimeout(Duration.ofSeconds(60))
 				.build();
 	}
 

@@ -26,17 +26,17 @@ jobs:
           java-version: '21'
           cache: 'maven'
 
-      - name: Disable TestContainers Ryuk
+      - name: Disable TestContainers Ryuk and configure network
         run: |
           echo "TESTCONTAINERS_RYUK_DISABLED=true" >> $GITHUB_ENV
           sudo sh -c 'echo "127.0.0.1 host.testcontainers.internal" >> /etc/hosts'
+          sudo sh -c 'echo "127.0.0.1 kafka" >> /etc/hosts'
           mkdir -p ~/.testcontainers
           echo "ryuk.container.enabled=false" > ~/.testcontainers/testcontainers.properties
+          echo "host.testcontainers.internal.host=localhost" >> ~/.testcontainers/testcontainers.properties
 
-      # Simple full build with skipped tests
       - name: Build all modules
         run: mvn --batch-mode clean install -DskipTests
 
-      # Run tests in customer-write module only
       - name: Run tests in customer-write
         run: mvn --batch-mode test -pl customer-write -Dsurefire.failIfNoSpecifiedTests=false -Dtestcontainers.ryuk.disabled=true
