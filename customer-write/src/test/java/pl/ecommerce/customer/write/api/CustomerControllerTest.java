@@ -1,5 +1,6 @@
 package pl.ecommerce.customer.write.api;
 
+import lombok.extern.slf4j.Slf4j;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -8,12 +9,12 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.http.MediaType;
-import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.reactive.server.WebTestClient;
 import org.testcontainers.containers.KafkaContainer;
+import org.testcontainers.containers.Network;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
@@ -27,20 +28,20 @@ import pl.ecommerce.customer.write.infrastructure.repository.CustomerRepository;
 
 import java.time.Duration;
 import java.util.List;
+import java.util.Objects;
 import java.util.UUID;
 
+import static java.util.Objects.nonNull;
 import static org.assertj.core.api.Assertions.assertThat;
 import static pl.ecommerce.commons.model.customer.CustomerStatus.DELETED;
 
+@Slf4j
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @Testcontainers
 @ActiveProfiles("test")
 class CustomerControllerTest {
 
-	static {
-		System.setProperty("testcontainers.ryuk.disabled", "true");
-		System.setProperty("testcontainers.reuse.enable", "true");
-	}
+	static final Network network = Network.newNetwork();
 
 	@LocalServerPort
 	private int port;
@@ -51,23 +52,36 @@ class CustomerControllerTest {
 	CustomerRepository customerRepository;
 
 	@Container
-	static PostgreSQLContainer<?> postgresContainer = new PostgreSQLContainer<>(DockerImageName.parse("postgres:16-alpine"))
+	static final PostgreSQLContainer<?> postgresContainer = new PostgreSQLContainer<>(DockerImageName.parse("postgres:16-alpine"))
 			.withDatabaseName("customer_event_store")
 			.withUsername("test")
-			.withPassword("test");
+			.withPassword("test")
+			.withNetwork(network);
 
 	@Container
-	static KafkaContainer kafkaContainer = new KafkaContainer(DockerImageName.parse("confluentinc/cp-kafka:7.5.0"));
+	static final KafkaContainer kafkaContainer = new KafkaContainer(DockerImageName.parse("confluentinc/cp-kafka:7.5.0"))
+			.withNetwork(network)
+			.withNetworkAliases("kafka");
 
 	@DynamicPropertySource
 	static void registerDynamicProperties(DynamicPropertyRegistry registry) {
 		registry.add("spring.datasource.url", postgresContainer::getJdbcUrl);
 		registry.add("spring.datasource.username", postgresContainer::getUsername);
 		registry.add("spring.datasource.password", postgresContainer::getPassword);
-		registry.add("spring.kafka.bootstrap-servers", kafkaContainer::getBootstrapServers);
-		registry.add("spring.kafka.producer.properties.max.block.ms", () -> "3000");
-		registry.add("spring.kafka.producer.properties.request.timeout.ms", () -> "3000");
-		registry.add("spring.kafka.producer.properties.delivery.timeout.ms", () -> "3000");
+
+		if (Objects.nonNull(System.getenv("CI"))) {
+			String kafkaAddress = "kafka:9092";
+			registry.add("spring.kafka.bootstrap-servers", () -> kafkaAddress);
+			System.setProperty("spring.kafka.bootstrap-servers", kafkaAddress);
+			log.info(">>>>USE CI CONFIG: {}<<<<<", kafkaAddress);
+		} else {
+			registry.add("spring.kafka.bootstrap-servers", kafkaContainer::getBootstrapServers);
+			log.info(">>>>USE LOCAL CONFIG: {}<<<<<", kafkaContainer.getBootstrapServers());
+		}
+
+		registry.add("spring.kafka.producer.properties.max.block.ms", () -> "10000");
+		registry.add("spring.kafka.producer.properties.request.timeout.ms", () -> "10000");
+		registry.add("spring.kafka.producer.properties.delivery.timeout.ms", () -> "10000");
 		registry.add("management.tracing.enabled", () -> "false");
 	}
 
@@ -87,7 +101,7 @@ class CustomerControllerTest {
 	void setUp() {
 		webTestClient = WebTestClient.bindToServer()
 				.baseUrl("http://localhost:" + port + "/api/v1/customers")
-				.responseTimeout(Duration.ofSeconds(30))
+				.responseTimeout(Duration.ofSeconds(60))
 				.build();
 	}
 
