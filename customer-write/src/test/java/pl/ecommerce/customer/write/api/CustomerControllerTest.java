@@ -48,14 +48,14 @@ class CustomerControllerTest {
 	CustomerRepository customerRepository;
 
 	@Container
-	static PostgreSQLContainer<?> postgresContainer = new PostgreSQLContainer<>(DockerImageName.parse("postgres:16-alpine"))
+	static final PostgreSQLContainer<?> postgresContainer = new PostgreSQLContainer<>(DockerImageName.parse("postgres:16-alpine"))
 			.withDatabaseName("customer_event_store")
 			.withUsername("test")
 			.withPassword("test")
 			.withNetwork(network);
 
 	@Container
-	static KafkaContainer kafkaContainer = new KafkaContainer(DockerImageName.parse("confluentinc/cp-kafka:7.5.0"))
+	static final KafkaContainer kafkaContainer = new KafkaContainer(DockerImageName.parse("confluentinc/cp-kafka:7.5.0"))
 			.withNetwork(network)
 			.withNetworkAliases("kafka");
 
