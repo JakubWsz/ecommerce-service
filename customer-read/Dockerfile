@@ -1,26 +1,12 @@
-FROM azul/zulu-openjdk-alpine:21 as build
-WORKDIR /workspace/app
+FROM maven:3.9.6-eclipse-temurin-21-alpine AS build
 
-COPY mvnw .
-COPY .mvn .mvn
-COPY pom.xml .
-COPY commons/pom.xml commons/
-COPY customer-read/pom.xml customer-read/
+WORKDIR /app
+COPY . .
 
-RUN ./mvnw dependency:go-offline -B
+RUN mvn -B -ntp -Dmaven.test.skip=true -pl customer-read -am package
 
-COPY commons/src commons/src
-COPY customer-read/src customer-read/src
+FROM eclipse-temurin:21-jre-alpine
+WORKDIR /app
+COPY --from=build /app/customer-read/target/*.jar app.jar
 
-RUN ./mvnw clean package -pl customer-read -am -DskipTests
-RUN mkdir -p /app/logs
-RUN mkdir -p target/dependency && (cd target/dependency; jar -xf ../customer-read/target/*.jar)
-
-FROM azul/zulu-openjdk-alpine:21-jre
-VOLUME /tmp
-VOLUME ["/app/logs"]
-ARG DEPENDENCY=/workspace/app/target/dependency
-COPY --from=build ${DEPENDENCY}/BOOT-INF/lib /app/lib
-COPY --from=build ${DEPENDENCY}/META-INF /app/META-INF
-COPY --from=build ${DEPENDENCY}/BOOT-INF/classes /app
-ENTRYPOINT ["java", "-cp", "app:app/lib/*", "pl.ecommerce.customer.read.CustomerReadApplication"]
+ENTRYPOINT ["java", "-jar", "app.jar"]
