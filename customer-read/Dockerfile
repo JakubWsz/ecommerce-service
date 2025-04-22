@@ -1,26 +1,22 @@
-FROM azul/zulu-openjdk-alpine:21 as build
-WORKDIR /workspace/app
+FROM azul/zulu-openjdk-alpine:21 AS build
+
+WORKDIR /app
 
 COPY mvnw .
-COPY .mvn .mvn
+COPY mvnw.cmd .
+RUN chmod +x mvnw
+COPY mvnw.cmd .
 COPY pom.xml .
 COPY commons/pom.xml commons/
 COPY customer-read/pom.xml customer-read/
-
-RUN ./mvnw dependency:go-offline -B
-
-COPY commons/src commons/src
 COPY customer-read/src customer-read/src
 
-RUN ./mvnw clean package -pl customer-read -am -DskipTests
-RUN mkdir -p /app/logs
-RUN mkdir -p target/dependency && (cd target/dependency; jar -xf ../customer-read/target/*.jar)
+RUN ./mvnw -B -ntp -Dmaven.test.skip=true -pl customer-read -am package
 
 FROM azul/zulu-openjdk-alpine:21-jre
-VOLUME /tmp
-VOLUME ["/app/logs"]
-ARG DEPENDENCY=/workspace/app/target/dependency
-COPY --from=build ${DEPENDENCY}/BOOT-INF/lib /app/lib
-COPY --from=build ${DEPENDENCY}/META-INF /app/META-INF
-COPY --from=build ${DEPENDENCY}/BOOT-INF/classes /app
-ENTRYPOINT ["java", "-cp", "app:app/lib/*", "pl.ecommerce.customer.read.CustomerReadApplication"]
+
+WORKDIR /app
+
+COPY --from=build /app/customer-read/target/*.jar app.jar
+
+ENTRYPOINT ["java", "-jar", "app.jar"]
