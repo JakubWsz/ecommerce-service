@@ -1,18 +1,15 @@
-FROM azul/zulu-openjdk-alpine:21 AS build
+FROM maven:3.9.6-eclipse-temurin-21-alpine AS build
 
 WORKDIR /app
 
-COPY mvnw .
-COPY mvnw.cmd .
-RUN chmod +x mvnw
 COPY pom.xml .
 COPY commons/pom.xml commons/
 COPY customer-read/pom.xml customer-read/
 COPY customer-read/src customer-read/src
 
-RUN ./mvnw -B -ntp -Dmaven.test.skip=true -pl customer-read -am package
+RUN mvn -B -ntp -Dmaven.test.skip=true -pl customer-read -am package
 
-FROM azul/zulu-openjdk-alpine:21-jre
+FROM eclipse-temurin:21-jre-alpine
 
 WORKDIR /app
 
