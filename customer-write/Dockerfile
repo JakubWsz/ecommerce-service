@@ -4,6 +4,7 @@ WORKDIR /app
 
 COPY mvnw .
 COPY mvnw.cmd .
+RUN chmod +x mvnw
 COPY pom.xml .
 COPY commons/pom.xml commons/
 COPY customer-write/pom.xml customer-write/
