@@ -2,10 +2,10 @@ FROM maven:3.9.6-eclipse-temurin-21-alpine AS build
 
 WORKDIR /app
 
-COPY pom.xml .
-COPY commons/pom.xml commons/
-COPY customer-read/pom.xml customer-read/
-COPY customer-read/src customer-read/src
+COPY ../../pom.xml .
+COPY ../../commons ./commons
+COPY . ./customer-read
+COPY ../../customer-write ./customer-write
 
 RUN mvn -B -ntp -Dmaven.test.skip=true -pl customer-read -am package
 
