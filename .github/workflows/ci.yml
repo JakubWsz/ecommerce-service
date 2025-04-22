@@ -51,4 +51,3 @@ jobs:
 
       - name: Push customer-write to Docker Hub
         run: docker push ${{ secrets.DOCKERHUB_USERNAME }}/customer-write:latest
-
