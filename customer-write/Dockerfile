@@ -1,18 +1,22 @@
 FROM maven:3.9.6-eclipse-temurin-21-alpine AS build
 
+ARG MODULE=customer-write
+
 WORKDIR /app
+COPY . .
 
-COPY ../../pom.xml .
-COPY ../../commons ./commons
-COPY . ./customer-write
-COPY ../../customer-read ./customer-read
-
-RUN mvn -B -ntp -Dmaven.test.skip=true -pl customer-write -am package
+RUN if [ -z "$MODULE" ]; then \
+      echo "MODULE argument is not set"; \
+      exit 1; \
+    else \
+      echo "Building module: $MODULE"; \
+      mvn -B -ntp -Dmaven.test.skip=true -pl "$MODULE" -am package; \
+    fi
 
 FROM eclipse-temurin:21-jre-alpine
-
 WORKDIR /app
 
-COPY --from=build /app/customer-write/target/*.jar app.jar
+ARG MODULE=customer-write
+COPY --from=build /app/${MODULE}/target/*.jar app.jar
 
 ENTRYPOINT ["java", "-jar", "app.jar"]
