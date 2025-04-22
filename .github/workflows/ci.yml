@@ -41,13 +41,14 @@ jobs:
         run: echo "${{ secrets.DOCKERHUB_TOKEN }}" | docker login -u "${{ secrets.DOCKERHUB_USERNAME }}" --password-stdin
 
       - name: Build customer-read Docker image
-        run: docker build -t ${{ secrets.DOCKERHUB_USERNAME }}/customer-read:latest -f customer-read/Dockerfile .
+        run: docker build --build-arg MODULE=customer-read -t ${{ secrets.DOCKERHUB_USERNAME }}/customer-read:latest -f Dockerfile .
 
       - name: Build customer-write Docker image
-        run: docker build -t ${{ secrets.DOCKERHUB_USERNAME }}/customer-write:latest -f customer-write/Dockerfile .
+        run: docker build --build-arg MODULE=customer-write -t ${{ secrets.DOCKERHUB_USERNAME }}/customer-write:latest -f Dockerfile .
 
       - name: Push customer-read to Docker Hub
         run: docker push ${{ secrets.DOCKERHUB_USERNAME }}/customer-read:latest
 
       - name: Push customer-write to Docker Hub
         run: docker push ${{ secrets.DOCKERHUB_USERNAME }}/customer-write:latest
+
