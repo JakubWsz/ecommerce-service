@@ -1,0 +1,182 @@
+{{/*apiVersion: v1*/}}
+{{/*kind: ConfigMap*/}}
+{{/*metadata:*/}}
+{{/*  name: {{ include "customer-read.fullname" . }}*/}}
+{{/*  labels:*/}}
+{{/*    {{ include "customer-read.labels" . | nindent 4 }}*/}}
+
+{{/*data:*/}}
+{{/*  application.yml: |*/}}
+{{/*    # Common configuration for all profiles*/}}
+{{/*    spring:*/}}
+{{/*      application:*/}}
+{{/*        name: customer-read*/}}
+{{/*      main:*/}}
+{{/*        web-application-type: reactive*/}}
+
+{{/*      # MongoDB configuration for read model*/}}
+{{/*      data:*/}}
+{{/*        mongodb:*/}}
+{{/*          uri: mongodb://customer_user:customer_pass@{{ .Release.Name }}-infrastructure-mongodb:27017/customer?authSource=admin*/}}
+{{/*          database: customer*/}}
+{{/*          authentication-database: admin*/}}
+{{/*          auto-index-creation: true*/}}
+
+{{/*      # Kafka configuration for event consumption*/}}
+{{/*      kafka:*/}}
+{{/*        bootstrap-servers: {{ .Release.Name }}-infrastructure-kafka:9092*/}}
+{{/*        schema-registry-url: http://{{ .Release.Name }}-infrastructure-schema-registry:8081*/}}
+{{/*        consumer:*/}}
+{{/*          observation-enabled: true*/}}
+{{/*          group-id: ${spring.application.name}*/}}
+{{/*          auto-offset-reset: earliest*/}}
+{{/*          key-deserializer: org.apache.kafka.common.serialization.StringDeserializer*/}}
+{{/*          value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer*/}}
+{{/*          properties:*/}}
+{{/*            spring.json.trusted.packages: pl.ecommerce.customer.commons.events*/}}
+{{/*          enable-auto-commit: false*/}}
+{{/*        listener:*/}}
+{{/*          observation-enabled: true*/}}
+{{/*          ack-mode: MANUAL*/}}
+
+{{/*    # Configure the topics to listen for*/}}
+{{/*    event:*/}}
+{{/*      listener:*/}}
+{{/*        group-id: ${spring.application.name}-group*/}}
+{{/*        topics:*/}}
+{{/*          - customer.registered.event*/}}
+{{/*          - customer.updated.event*/}}
+{{/*          - customer.email-changed.event*/}}
+{{/*          - customer.email-verified.event*/}}
+{{/*          - customer.address-added.event*/}}
+{{/*          - customer.address-updated.event*/}}
+{{/*          - customer.address-removed.event*/}}
+{{/*          - customer.preferences-updated.event*/}}
+{{/*          - customer.deactivated.event*/}}
+{{/*          - customer.reactivated.event*/}}
+{{/*          - customer.deleted.event*/}}
+
+{{/*    # Server settings*/}}
+{{/*    server:*/}}
+{{/*      port: 8080*/}}
+{{/*      shutdown: graceful*/}}
+{{/*      http2:*/}}
+{{/*        enabled: true*/}}
+
+{{/*    # Monitoring and actuator configuration*/}}
+{{/*    management:*/}}
+{{/*      endpoints:*/}}
+{{/*        web:*/}}
+{{/*          exposure:*/}}
+{{/*            include: health,info,prometheus,metrics,loggers,env,beans*/}}
+{{/*      endpoint:*/}}
+{{/*        health:*/}}
+{{/*          show-details: always*/}}
+{{/*          probes:*/}}
+{{/*            enabled: true*/}}
+{{/*          group:*/}}
+{{/*            readiness:*/}}
+{{/*              include: db, diskSpace*/}}
+{{/*      metrics:*/}}
+{{/*        distribution:*/}}
+{{/*          percentiles-histogram:*/}}
+{{/*            http.server.requests: true*/}}
+{{/*          percentiles:*/}}
+{{/*            http.server.requests: 0.5, 0.9, 0.95, 0.99*/}}
+{{/*        tags:*/}}
+{{/*          application: ${spring.application.name}*/}}
+{{/*      tracing:*/}}
+{{/*        enabled: true*/}}
+{{/*        sampling:*/}}
+{{/*          probability: 1.0*/}}
+
+{{/*    # Logging configuration*/}}
+{{/*    logging:*/}}
+{{/*      logstash:*/}}
+{{/*        host: {{ .Release.Name }}-infrastructure-logstash*/}}
+{{/*        port: 5000*/}}
+{{/*      level:*/}}
+{{/*        root: INFO*/}}
+{{/*        pl.ecommerce: DEBUG*/}}
+
+{{/*    # Enable Swagger UI*/}}
+{{/*    springdoc:*/}}
+{{/*      swagger-ui:*/}}
+{{/*        path: /swagger-ui.html*/}}
+{{/*        enabled: true*/}}
+{{/*      api-docs:*/}}
+{{/*        enabled: true*/}}
+
+{{/*    # Kafka DLQ configuration*/}}
+{{/*    kafka:*/}}
+{{/*      dlq:*/}}
+{{/*        enabled: true*/}}
+{{/*        retry-attempts: 3*/}}
+{{/*        initial-interval-ms: 1000*/}}
+{{/*        multiplier: 2.0*/}}
+{{/*        max-interval-ms: 60000*/}}
+{{/*        retry-interval-ms: 60000*/}}
+{{/*        topics: customer.registered.event.DLT,customer.updated.event.DLT,customer.email-changed.event.DLT,customer.email-verified.event.DLT,customer.phone-verified.event.DLT,customer.address-added.event.DLT,customer.address-updated.event.DLT,customer.address-removed.event.DLT,customer.preferences-updated.event.DLT,customer.deactivated.event.DLT,customer.reactivated.event.DLT,customer.deleted.event.DLT*/}}
+
+{{/*    # OpenTelemetry configuration*/}}
+{{/*    opentelemetry:*/}}
+{{/*      otlp:*/}}
+{{/*        endpoint: http://{{ .Release.Name }}-infrastructure-otel-collector:4317*/}}
+
+{{/*    ---*/}}
+{{/*    # Profile: dev*/}}
+{{/*    spring:*/}}
+{{/*      config:*/}}
+{{/*        activate:*/}}
+{{/*          on-profile: {{ .Values.global.environment }}*/}}
+
+{{/*      # MongoDB configuration for development*/}}
+{{/*      data:*/}}
+{{/*        mongodb:*/}}
+{{/*          uri: mongodb://customer_user:customer_pass@{{ .Release.Name }}-infrastructure-mongodb:27017/customer?authSource=admin*/}}
+{{/*          database: customer*/}}
+
+{{/*      # Kafka configuration for development*/}}
+{{/*      kafka:*/}}
+{{/*        bootstrap-servers: {{ .Release.Name }}-infrastructure-kafka:9092*/}}
+
+{{/*    # Logging configuration for dev*/}}
+{{/*    logging:*/}}
+{{/*      level:*/}}
+{{/*        pl.ecommerce.customer.read: DEBUG*/}}
+
+{{/*    deployment:*/}}
+{{/*      environment: {{ .Values.global.environment }}*/}}
+
+{{/*    ---*/}}
+{{/*    # Profile: prod*/}}
+{{/*    spring:*/}}
+{{/*      config:*/}}
+{{/*        activate:*/}}
+{{/*          on-profile: prod*/}}
+
+{{/*      # MongoDB configuration for production*/}}
+{{/*      data:*/}}
+{{/*        mongodb:*/}}
+{{/*          uri: mongodb://${MONGO_USER:customer_user}:${MONGO_PASSWORD:customer_pass}@{{ .Release.Name }}-infrastructure-mongodb:27017/${MONGO_DB:customer}?authSource=admin*/}}
+{{/*          database: ${MONGO_DB:customer}*/}}
+
+{{/*      # Kafka configuration for production*/}}
+{{/*      kafka:*/}}
+{{/*        bootstrap-servers: {{ .Release.Name }}-infrastructure-kafka:9092*/}}
+
+{{/*    # Logging configuration for production*/}}
+{{/*    logging:*/}}
+{{/*      level:*/}}
+{{/*        root: WARN*/}}
+{{/*        pl.ecommerce.customer.read: INFO*/}}
+
+{{/*    # Disable Swagger UI for production*/}}
+{{/*    springdoc:*/}}
+{{/*      swagger-ui:*/}}
+{{/*        enabled: false*/}}
+{{/*      api-docs:*/}}
+{{/*        enabled: false*/}}
+
+{{/*    deployment:*/}}
+{{/*      environment: production*/}}

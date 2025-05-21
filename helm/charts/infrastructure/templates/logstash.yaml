@@ -1,0 +1,103 @@
+{{- if .Values.infrastructure.logstash.enabled }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "infrastructure.fullname" . }}-{{ .Values.infrastructure.logstash.configMap.name }}
+  labels:
+    {{ include "infrastructure.labels" . | nindent 4 }}
+    app.kubernetes.io/component: logstash
+data:
+  {{ toYaml .Values.infrastructure.logstash.configMap.data | nindent 2 }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "infrastructure.fullname" . }}-logstash
+  labels:
+    {{ include "infrastructure.labels" . | nindent 4 }}
+    app.kubernetes.io/component: logstash
+spec:
+  type: {{ .Values.infrastructure.logstash.service.type }}
+  ports:
+{{- range .Values.infrastructure.logstash.service.ports }}
+    - name: {{ .name }}
+      port: {{ .port }}
+      targetPort: {{ .targetPort }}
+      protocol: TCP
+{{- end }}
+  selector:
+    {{ include "infrastructure.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: logstash
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "infrastructure.fullname" . }}-logstash
+  labels:
+    {{ include "infrastructure.labels" . | nindent 4 }}
+    app.kubernetes.io/component: logstash
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{ include "infrastructure.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: logstash
+  template:
+    metadata:
+      labels:
+        {{ include "infrastructure.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: logstash
+    spec:
+      containers:
+        - name: logstash
+          image: "{{ .Values.infrastructure.logstash.image.repository }}:{{ .Values.infrastructure.logstash.image.tag }}"
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 5000
+              name: tcp
+            - containerPort: 9600
+              name: api
+          env:
+{{ toYaml .Values.infrastructure.logstash.environment | nindent 12 }}
+          volumeMounts:
+            - name: config
+              mountPath: /usr/share/logstash/config
+            - name: pipeline
+              mountPath: /usr/share/logstash/pipeline
+          resources:
+{{ toYaml .Values.infrastructure.logstash.resources | nindent 12 }}
+          livenessProbe:
+            httpGet:
+              path: /
+              port: api
+            initialDelaySeconds: 60
+            periodSeconds: 20
+            timeoutSeconds: 5
+          readinessProbe:
+            httpGet:
+              path: /
+              port: api
+            initialDelaySeconds: 60
+            periodSeconds: 10
+            timeoutSeconds: 5
+      volumes:
+        - name: config
+          configMap:
+            name: {{ include "infrastructure.fullname" . }}-{{ .Values.infrastructure.logstash.configMap.name }}
+            items:
+              - key: jvm.options
+                path: jvm.options
+              - key: log4j2.properties
+                path: log4j2.properties
+              - key: logstash.yml
+                path: logstash.yml
+              - key: pipelines.yml
+                path: pipelines.yml
+        - name: pipeline
+          configMap:
+            name: {{ include "infrastructure.fullname" . }}-{{ .Values.infrastructure.logstash.configMap.name }}
+            items:
+              - key: logstash.conf
+                path: logstash.conf
+{{- end }}

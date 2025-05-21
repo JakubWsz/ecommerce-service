@@ -1,0 +1,87 @@
+{{- if (index .Values "infrastructure" "otel-collector" "enabled" | default false) }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "infrastructure.fullname" . }}-{{ (index .Values "infrastructure" "otel-collector" "configMap" "name") }}
+  labels:
+    {{ include "infrastructure.labels" . | nindent 4 }}
+    app.kubernetes.io/component: otel-collector
+data:
+  {{ toYaml (index .Values "infrastructure" "otel-collector" "configMap" "data") | nindent 2 }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "infrastructure.fullname" . }}-otel-collector
+  labels:
+    {{ include "infrastructure.labels" . | nindent 4 }}
+    app.kubernetes.io/component: otel-collector
+spec:
+  type: {{ (index .Values "infrastructure" "otel-collector" "service" "type") | default "ClusterIP" }}
+  ports:
+    {{- range (index .Values "infrastructure" "otel-collector" "service" "ports" | default (list)) }}
+    - port: {{ .port | default 4317 }}
+      targetPort: {{ .targetPort | default "http" }}
+      protocol: TCP
+      name: {{ .name | default "default" }}
+    {{- end }}
+  selector:
+    {{ include "infrastructure.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: otel-collector
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "infrastructure.fullname" . }}-otel-collector
+  labels:
+    {{ include "infrastructure.labels" . | nindent 4 }}
+    app.kubernetes.io/component: otel-collector
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{ include "infrastructure.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: otel-collector
+  template:
+    metadata:
+      labels:
+        {{ include "infrastructure.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: otel-collector
+    spec:
+      containers:
+        - name: otel-collector
+          image: "{{ (index .Values "infrastructure" "otel-collector" "image" "repository") }}:{{ (index .Values "infrastructure" "otel-collector" "image" "tag") }}"
+          imagePullPolicy: IfNotPresent
+          args:
+            - --config=/conf/otel-collector-config.yaml
+          ports:
+            - containerPort: 4317
+              name: grpc
+            - containerPort: 4318
+              name: http
+            - containerPort: 8889
+              name: prometheus
+          volumeMounts:
+            - name: otel-collector-config
+              mountPath: /conf
+          resources:
+            {{ toYaml (index .Values "infrastructure" "otel-collector" "resources") | nindent 12 }}
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 8889
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 8889
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+      volumes:
+        - name: otel-collector-config
+          configMap:
+            name: {{ include "infrastructure.fullname" . }}-{{ (index .Values "infrastructure" "otel-collector" "configMap" "name") }}
+{{- end }}

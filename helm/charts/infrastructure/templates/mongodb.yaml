@@ -1,0 +1,146 @@
+{{- if .Values.infrastructure.mongodb.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "infrastructure.fullname" . }}-mongodb
+  labels:
+    {{ include "infrastructure.labels" . | nindent 4 }}
+    app.kubernetes.io/component: mongodb
+spec:
+  type: {{ .Values.infrastructure.mongodb.service.type }}
+  ports:
+    - port: {{ .Values.infrastructure.mongodb.service.port }}
+      targetPort: mongodb
+      protocol: TCP
+      name: mongodb
+  selector:
+    {{ include "infrastructure.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: mongodb
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ include "infrastructure.fullname" . }}-mongodb-secret
+  labels:
+    {{ include "infrastructure.labels" . | nindent 4 }}
+    app.kubernetes.io/component: mongodb
+type: Opaque
+data:
+  mongodb-root-username: {{ .Values.infrastructure.mongodb.environment.MONGO_INITDB_ROOT_USERNAME | b64enc | quote }}
+  mongodb-root-password: {{ .Values.infrastructure.mongodb.environment.MONGO_INITDB_ROOT_PASSWORD | b64enc | quote }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "infrastructure.fullname" . }}-mongodb-init
+  labels:
+    {{ include "infrastructure.labels" . | nindent 4 }}
+    app.kubernetes.io/component: mongodb
+data:
+  mongo-init.js: |
+    db = db.getSiblingDB('admin');
+    db.auth('admin', 'admin');
+
+    db = db.getSiblingDB('customer');
+    db.createUser({
+        user: 'customer_user',
+        pwd: 'customer_pass',
+        roles: [{ role: 'readWrite', db: 'customer' }]
+    });
+
+    db = db.getSiblingDB('product');
+    db.createUser({
+        user: 'product_user',
+        pwd: 'product_pass',
+        roles: [{ role: 'readWrite', db: 'product' }]
+    });
+
+    db = db.getSiblingDB('vendor');
+    db.createUser({
+        user: 'vendor_user',
+        pwd: 'vendor_pass',
+        roles: [{ role: 'readWrite', db: 'vendor' }]
+    });
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "infrastructure.fullname" . }}-mongodb
+  labels:
+    {{ include "infrastructure.labels" . | nindent 4 }}
+    app.kubernetes.io/component: mongodb
+spec:
+  serviceName: {{ include "infrastructure.fullname" . }}-mongodb
+  replicas: 1
+  selector:
+    matchLabels:
+      {{ include "infrastructure.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: mongodb
+  template:
+    metadata:
+      labels:
+        {{ include "infrastructure.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: mongodb
+    spec:
+      containers:
+        - name: mongodb
+          image: "{{ .Values.infrastructure.mongodb.image.repository }}:{{ .Values.infrastructure.mongodb.image.tag }}"
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 27017
+              name: mongodb
+          env:
+            - name: MONGO_INITDB_ROOT_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "infrastructure.fullname" . }}-mongodb-secret
+                  key: mongodb-root-username
+            - name: MONGO_INITDB_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "infrastructure.fullname" . }}-mongodb-secret
+                  key: mongodb-root-password
+          volumeMounts:
+            - name: mongodb-data
+              mountPath: /data/db
+            - name: mongodb-init-script
+              mountPath: /docker-entrypoint-initdb.d
+          resources:
+            {{ toYaml .Values.infrastructure.mongodb.resources | nindent 12 }}
+          livenessProbe:
+            exec:
+              command:
+                - mongosh
+                - --quiet
+                - --eval
+                - "db.adminCommand('ping')"
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            exec:
+              command:
+                - mongosh
+                - --quiet
+                - --eval
+                - "db.adminCommand('ping')"
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+      volumes:
+        - name: mongodb-init-script
+          configMap:
+            name: {{ include "infrastructure.fullname" . }}-mongodb-init
+            defaultMode: 0755
+  volumeClaimTemplates:
+    - metadata:
+        name: mongodb-data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        storageClassName: {{ .Values.global.storageClass }}
+        resources:
+          requests:
+            storage: {{ .Values.infrastructure.mongodb.persistence.size }}
+{{- end }}

@@ -1,0 +1,19 @@
+apiVersion: v2
+name: ecommerce
+description: Ecommerce microservices architecture deployment
+type: application
+version: 0.1.0
+appVersion: "1.0.0"
+dependencies:
+  - name: customer-write
+    version: 0.1.0
+    repository: file://charts/customer-write
+    condition: customer-write.enabled
+  - name: customer-read
+    version: 0.1.0
+    repository: file://charts/customer-read
+    condition: customer-read.enabled
+  - name: infrastructure
+    version: 0.1.0
+    repository: file://charts/infrastructure
+    condition: infrastructure.enabled

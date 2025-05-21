@@ -1,0 +1,75 @@
+{{- if .Values.infrastructure.jaeger.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "infrastructure.fullname" . }}-jaeger
+  labels:
+    {{ include "infrastructure.labels" . | nindent 4 }}
+    app.kubernetes.io/component: jaeger
+spec:
+  type: {{ .Values.infrastructure.jaeger.service.type }}
+  ports:
+    {{- range .Values.infrastructure.jaeger.service.ports }}
+    - port: {{ .port }}
+      targetPort: {{ .targetPort }}
+      protocol: TCP
+      name: {{ .name }}
+    {{- end }}
+  selector:
+    {{ include "infrastructure.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: jaeger
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "infrastructure.fullname" . }}-jaeger
+  labels:
+    {{ include "infrastructure.labels" . | nindent 4 }}
+    app.kubernetes.io/component: jaeger
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{ include "infrastructure.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: jaeger
+  template:
+    metadata:
+      labels:
+        {{ include "infrastructure.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: jaeger
+    spec:
+      containers:
+        - name: jaeger
+          image: "{{ .Values.infrastructure.jaeger.image.repository }}:{{ .Values.infrastructure.jaeger.image.tag }}"
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 16686
+              name: ui
+            - containerPort: 14268
+              name: thrift
+            - containerPort: 4317
+              name: grpc
+            - containerPort: 4318
+              name: http
+          env:
+            {{- range .Values.infrastructure.jaeger.environment }}
+            - name: {{ (split "=" .)._0 }}
+              value: {{ (split "=" .)._1 }}
+            {{- end }}
+          resources:
+            {{ toYaml .Values.infrastructure.jaeger.resources | nindent 12 }}
+          livenessProbe:
+            httpGet:
+              path: /
+              port: ui
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+          readinessProbe:
+            httpGet:
+              path: /
+              port: ui
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+{{- end }}

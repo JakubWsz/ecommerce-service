@@ -1,0 +1,25 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "ecommerce.fullname" . }}-config
+  labels:
+    {{- include "ecommerce.labels" . | nindent 4 }}
+data:
+  app-config.yaml: |
+    environment: {{ .Values.global.environment }}
+    domain: {{ .Values.global.domain }}
+    services:
+{{- $customerWriteEnabled := (index .Values "customer-write" "enabled") }}
+{{- $customerWritePort := default 8080 (index .Values "customer-write" "service" "port") }}
+{{- $customerReadEnabled := (index .Values "customer-read" "enabled") }}
+{{- $customerReadPort := default 8080 (index .Values "customer-read" "service" "port") }}
+{{- $customerWriteServiceName := printf "%s-customer-write" .Release.Name }}
+{{- $customerReadServiceName := printf "%s-customer-read" .Release.Name }}
+      customer-write:
+        enabled: {{ $customerWriteEnabled }}
+        url: >-
+          http://{{ $customerWriteServiceName }}:{{ $customerWritePort }}
+      customer-read:
+        enabled: {{ $customerReadEnabled }}
+        url: >-
+          http://{{ $customerReadServiceName }}:{{ $customerReadPort }}

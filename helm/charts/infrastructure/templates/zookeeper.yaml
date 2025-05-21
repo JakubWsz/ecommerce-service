@@ -1,0 +1,108 @@
+{{- if .Values.infrastructure.zookeeper.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "infrastructure.fullname" . }}-zookeeper
+  labels:
+    {{ include "infrastructure.labels" . | nindent 4 }}
+    app.kubernetes.io/component: zookeeper
+spec:
+  type: {{ .Values.infrastructure.zookeeper.service.type }}
+  ports:
+    - port: {{ .Values.infrastructure.zookeeper.service.port }}
+      targetPort: client
+      protocol: TCP
+      name: client
+    - port: 2888
+      targetPort: server
+      protocol: TCP
+      name: server
+    - port: 3888
+      targetPort: leader-election
+      protocol: TCP
+      name: leader-election
+  selector:
+    {{ include "infrastructure.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: zookeeper
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "infrastructure.fullname" . }}-zookeeper
+  labels:
+    {{ include "infrastructure.labels" . | nindent 4 }}
+    app.kubernetes.io/component: zookeeper
+spec:
+  serviceName: {{ include "infrastructure.fullname" . }}-zookeeper
+  replicas: 1
+  selector:
+    matchLabels:
+      {{ include "infrastructure.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: zookeeper
+  template:
+    metadata:
+      labels:
+        {{ include "infrastructure.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: zookeeper
+    spec:
+      containers:
+        - name: zookeeper
+          image: "{{ .Values.infrastructure.zookeeper.image.repository }}:{{ .Values.infrastructure.zookeeper.image.tag }}"
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 2181
+              name: client
+            - containerPort: 2888
+              name: server
+            - containerPort: 3888
+              name: leader-election
+          env:
+            - name: ZOOKEEPER_CLIENT_PORT
+              value: "{{ .Values.infrastructure.zookeeper.environment.ZOOKEEPER_CLIENT_PORT }}"
+            - name: ZOOKEEPER_TICK_TIME
+              value: "{{ .Values.infrastructure.zookeeper.environment.ZOOKEEPER_TICK_TIME }}"
+          volumeMounts:
+            - name: zookeeper-data
+              mountPath: /var/lib/zookeeper/data
+            - name: zookeeper-log
+              mountPath: /var/lib/zookeeper/log
+          resources:
+            {{ toYaml .Values.infrastructure.zookeeper.resources | nindent 12 }}
+          livenessProbe:
+            exec:
+              command:
+                - /bin/bash
+                - -c
+                - "echo ruok | nc localhost 2181 | grep imok"
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            exec:
+              command:
+                - /bin/bash
+                - -c
+                - "echo ruok | nc localhost 2181 | grep imok"
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
+  volumeClaimTemplates:
+    - metadata:
+        name: zookeeper-data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        storageClassName: {{ .Values.global.storageClass }}
+        resources:
+          requests:
+            storage: {{ .Values.infrastructure.zookeeper.persistence.dataDirSize }}
+    - metadata:
+        name: zookeeper-log
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        storageClassName: {{ .Values.global.storageClass }}
+        resources:
+          requests:
+            storage: {{ .Values.infrastructure.zookeeper.persistence.logDirSize }}
+{{- end }}
