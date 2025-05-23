@@ -3,7 +3,7 @@ kind: ConfigMap
 metadata:
   name: {{ include "customer-read.fullname" . }}-config
   labels:
-    {{- include "customer-read.labels" . | nindent 4 }}
+{{- include "customer-read.labels" . | nindent 4 }}
 data:
   application.yml: |
     # Common configuration for all profiles

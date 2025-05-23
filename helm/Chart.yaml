@@ -7,13 +7,13 @@ appVersion: "1.0.0"
 dependencies:
   - name: customer-write
     version: 0.1.0
-    repository: file://charts/customer-write
+    repository: "file://./charts/customer-write"
     condition: customer-write.enabled
   - name: customer-read
     version: 0.1.0
-    repository: file://charts/customer-read
+    repository: "file://./charts/customer-read"
     condition: customer-read.enabled
   - name: infrastructure
     version: 0.1.0
-    repository: file://charts/infrastructure
+    repository: "file://./charts/infrastructure"
     condition: infrastructure.enabled
