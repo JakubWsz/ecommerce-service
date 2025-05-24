@@ -1,4 +1,4 @@
-package pl.ecommerce.infrastructure;
+package pl.ecommerce.infra;
 
 import software.amazon.awscdk.*;
 import software.amazon.awscdk.services.ec2.ISubnet;
@@ -15,10 +15,7 @@ import java.util.Objects;
 import static java.util.Objects.nonNull;
 
 public class DatabaseStack extends Stack {
-    private final DatabaseCluster postgresCluster;
     private final Secret databaseSecret;
-    private final CfnCacheCluster redisCluster;
-
 
     public DatabaseStack(final Construct scope, final String id, final String stage,
                          final NetworkStack networkStack, final StackProps props) {
@@ -47,7 +44,7 @@ public class DatabaseStack extends Stack {
                         ? List.of(clusterInstance())
                         : List.of();
 
-        this.postgresCluster = DatabaseCluster.Builder.create(this, "PostgresCluster")
+        DatabaseCluster postgresCluster = DatabaseCluster.Builder.create(this, "PostgresCluster")
                 .engine(DatabaseClusterEngine.auroraPostgres(
                         AuroraPostgresClusterEngineProps.builder()
                                 .version(AuroraPostgresEngineVersion.VER_15_4)
@@ -68,7 +65,8 @@ public class DatabaseStack extends Stack {
                         .build())
                 .build();
 
-        this.redisCluster = createRedisCluster(stage, networkStack);
+        createRedisCluster(stage, networkStack);
+      createDocumentDb(stage, networkStack);
 
         new CfnOutput(this, "PostgresEndpoint", CfnOutputProps.builder()
                 .value(postgresCluster.getClusterEndpoint().getHostname())
@@ -76,7 +74,7 @@ public class DatabaseStack extends Stack {
                 .build());
     }
 
-    private CfnCacheCluster createRedisCluster(String stage, NetworkStack networkStack) {
+    private void createRedisCluster(String stage, NetworkStack networkStack) {
         CfnSubnetGroup redisSubnetGroup = CfnSubnetGroup.Builder.create(this, "RedisSubnetGroup")
                 .description("Subnet group for Redis")
                 .subnetIds(networkStack.getVpc().getIsolatedSubnets().stream()
@@ -84,7 +82,7 @@ public class DatabaseStack extends Stack {
                         .toList())
                 .build();
 
-        return CfnCacheCluster.Builder.create(this, "RedisCluster")
+        CfnCacheCluster.Builder.create(this, "RedisCluster")
                 .cacheNodeType(Objects.equals(stage, "prod") ? "cache.r6g.large" : "cache.t3.micro")
                 .engine("redis")
                 .numCacheNodes(1)
@@ -102,6 +100,22 @@ public class DatabaseStack extends Stack {
         );
     }
 
-    public DatabaseCluster getPostgresCluster() { return postgresCluster; }
-    public Secret getDatabaseSecret() { return databaseSecret; }
+    private void createDocumentDb(String stage, NetworkStack networkStack) {
+        CfnDBCluster.Builder.create(this, "DocumentDB")
+                .masterUsername("ecommerce_admin")
+                .masterUserPassword(databaseSecret.secretValueFromJson("password").unsafeUnwrap())
+                .dbClusterIdentifier(String.format("ecommerce-docdb-%s", stage))
+                .vpcSecurityGroupIds(List.of(networkStack.getDbSecurityGroup().getSecurityGroupId()))
+                .dbSubnetGroupName(createDocDbSubnetGroup(networkStack).getRef())
+                .build();
+    }
+
+    private CfnDBSubnetGroup createDocDbSubnetGroup(NetworkStack networkStack) {
+        return CfnDBSubnetGroup.Builder.create(this, "DocDbSubnetGroup")
+                .dbSubnetGroupDescription("Subnet group for DocumentDB")
+                .subnetIds(networkStack.getVpc().getIsolatedSubnets().stream()
+                        .map(ISubnet::getSubnetId)
+                        .toList())
+                .build();
+    }
 }

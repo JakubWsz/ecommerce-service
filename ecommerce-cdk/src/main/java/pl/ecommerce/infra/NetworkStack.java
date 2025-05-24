@@ -1,4 +1,4 @@
-package pl.ecommerce.infrastructure;
+package pl.ecommerce.infra;
 
 import software.amazon.awscdk.Stack;
 import software.amazon.awscdk.StackProps;

@@ -1,4 +1,4 @@
-package pl.ecommerce.infrastructure;
+package pl.ecommerce.infra;
 
 import software.amazon.awscdk.*;
 import software.amazon.awscdk.services.ec2.InstanceType;

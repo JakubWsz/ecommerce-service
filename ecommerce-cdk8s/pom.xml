@@ -49,7 +49,7 @@
                 <executions>
                     <execution>
                         <id>cdk8s-synth</id>
-                        <phase>generate-resources</phase>
+                        <phase>none</phase>
                         <goals>
                             <goal>exec</goal>
                         </goals>
