@@ -61,13 +61,21 @@ jobs:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
           VERSION: ${{ steps.version.outputs.version }}
         run: |
-          for module in customer-read customer-write; do
-            docker build --build-arg MODULE=$module \
-              -t $ECR_REGISTRY/ecommerce-$module:$VERSION \
-              -t $ECR_REGISTRY/ecommerce-$module:latest .
-            docker push $ECR_REGISTRY/ecommerce-$module:$VERSION
-            docker push $ECR_REGISTRY/ecommerce-$module:latest
-          done
+          docker build \
+            -f customer-read/Dockerfile \
+            -t $ECR_REGISTRY/ecommerce-customer-read:$VERSION \
+            -t $ECR_REGISTRY/ecommerce-customer-read:latest \
+            .
+          docker push $ECR_REGISTRY/ecommerce-customer-read:$VERSION
+          docker push $ECR_REGISTRY/ecommerce-customer-read:latest
+          
+          docker build \
+            -f customer-write/Dockerfile \
+            -t $ECR_REGISTRY/ecommerce-customer-write:$VERSION \
+            -t $ECR_REGISTRY/ecommerce-customer-write:latest \
+            .
+          docker push $ECR_REGISTRY/ecommerce-customer-write:$VERSION
+          docker push $ECR_REGISTRY/ecommerce-customer-write:latest
 
   infra:
     name: Deploy Infrastructure

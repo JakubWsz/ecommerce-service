@@ -8,18 +8,15 @@ ENV MAVEN_OPTS="-XX:+TieredCompilation -XX:TieredStopAtLevel=1"
 WORKDIR /app
 
 COPY pom.xml .
-COPY commons/pom.xml commons/
-COPY customer-read/pom.xml customer-read/
-COPY customer-write/pom.xml customer-write/
-COPY ecommerce-cdk/pom.xml ecommerce-cdk/
-COPY ecommerce-cdk8s/pom.xml ecommerce-cdk8s/
+RUN mvn -N install -DskipTests
 
-RUN mvn dependency:go-offline -B -pl customer-write -am
+COPY commons/pom.xml commons/
+COPY customer-write/pom.xml customer-write/
+RUN mvn -f customer-write/pom.xml dependency:go-offline -B
 
 COPY commons/ commons/
 COPY customer-write/ customer-write/
-
-RUN mvn -B -ntp -Dmaven.test.skip=true -pl customer-write -am package
+RUN mvn -f customer-write/pom.xml -B -ntp -Dmaven.test.skip=true package
 
 FROM eclipse-temurin:21-jre-alpine
 
@@ -38,4 +35,4 @@ HEALTHCHECK --interval=30s --timeout=3s --retries=3 \
   CMD wget -q --spider http://localhost:8080/actuator/health || exit 1
 
 EXPOSE 8080
-ENTRYPOINT ["sh", "-c", "java $JAVA_OPTS -jar app.jar"]
+ENTRYPOINT ["sh","-c","java $JAVA_OPTS -jar app.jar"]
