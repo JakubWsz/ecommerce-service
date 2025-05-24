@@ -8,18 +8,14 @@ ENV MAVEN_OPTS="-XX:+TieredCompilation -XX:TieredStopAtLevel=1"
 WORKDIR /app
 
 COPY pom.xml .
-COPY ../commons/pom.xml ../commons/
-COPY ../pom.xml ../
-COPY ../.mvn/ ../.mvn/
-COPY ../mvnw .
+COPY commons/pom.xml commons/
+COPY customer-read/pom.xml customer-read/
+RUN mvn dependency:go-offline -B -pl customer-read -am
 
-RUN chmod +x mvnw
-RUN ./mvnw dependency:go-offline -B -pl customer-read -am
+COPY commons/ commons/
+COPY customer-read/ customer-read/
 
-COPY src/ src/
-COPY ../commons/ ../commons/
-
-RUN ./mvnw -B -ntp -Dmaven.test.skip=true -pl customer-read -am package
+RUN mvn -B -ntp -Dmaven.test.skip=true -pl customer-read -am package
 
 FROM eclipse-temurin:21-jre-alpine
 
@@ -30,13 +26,12 @@ ENV SPRING_PROFILES_ACTIVE="prod"
 
 WORKDIR /app
 RUN chown -R spring:spring /app
-
 USER spring:spring
 
 COPY --from=build --chown=spring:spring /app/customer-read/target/*.jar app.jar
 
-HEALTHCHECK --interval=30s --timeout=3s --retries=3 CMD wget -q --spider http://localhost:8080/actuator/health || exit 1
+HEALTHCHECK --interval=30s --timeout=3s --retries=3 \
+  CMD wget -q --spider http://localhost:8080/actuator/health || exit 1
 
 EXPOSE 8080
-
 ENTRYPOINT ["sh", "-c", "java $JAVA_OPTS -jar app.jar"]

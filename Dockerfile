@@ -11,12 +11,8 @@ WORKDIR /app
 COPY pom.xml .
 COPY commons/pom.xml commons/
 COPY ${MODULE}/pom.xml ${MODULE}/
-COPY .mvn/ .mvn/
-COPY mvnw .
 
-RUN chmod +x mvnw
-
-RUN ./mvnw dependency:go-offline -B -pl ${MODULE} -am
+RUN mvn dependency:go-offline -B -pl ${MODULE} -am
 
 COPY commons/ commons/
 COPY ${MODULE}/ ${MODULE}/
