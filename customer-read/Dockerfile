@@ -10,6 +10,10 @@ WORKDIR /app
 COPY pom.xml .
 COPY commons/pom.xml commons/
 COPY customer-read/pom.xml customer-read/
+COPY customer-write/pom.xml customer-write/
+COPY ecommerce-cdk/pom.xml ecommerce-cdk/
+COPY ecommerce-cdk8s/pom.xml ecommerce-cdk8s/
+
 RUN mvn dependency:go-offline -B -pl customer-read -am
 
 COPY commons/ commons/
