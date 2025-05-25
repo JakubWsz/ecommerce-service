@@ -2,22 +2,30 @@ name: CI
 
 on:
   pull_request:
-    branches:
-      - develop
-      - master
+    branches: [ develop, master ]
   push:
-    branches:
-      - develop
-      - master
+    branches: [ develop, master ]
+
+env:
+  AWS_REGION: eu-central-1
+  DOMAIN_NAME: ecommerce.pl
 
 jobs:
   build:
-    name: Build and Test
+    name: Build, Test & Push Images
     runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
+
+      - name: Generate version
+        id: version
+        run: |
+          VERSION="${GITHUB_SHA::7}-$(date +%Y%m%d%H%M%S)"
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
 
       - name: Set up JDK 21
         uses: actions/setup-java@v3
@@ -34,28 +42,170 @@ jobs:
       - name: Build all modules
         run: mvn --batch-mode clean install -DskipTests
 
-      - name: Run tests in customer-write
-        run: mvn --batch-mode test -pl customer-write -Dsurefire.failIfNoSpecifiedTests=false -Dtestcontainers.ryuk.disabled=true -DCI=true
+      - name: Run tests
+        run: mvn --batch-mode test
 
-      - name: Log in to Docker Hub
-        run: echo "${{ secrets.DOCKERHUB_TOKEN }}" | docker login -u "${{ secrets.DOCKERHUB_USERNAME }}" --password-stdin
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
 
-      - name: Build customer-read Docker image
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v1
+
+      - name: Create and configure ECR repositories
         run: |
-          echo "Building customer-read module..."
-          docker build \
-            --build-arg MODULE=customer-read \
-            -t ${{ secrets.DOCKERHUB_USERNAME }}/customer-read:latest .
+          chmod +x .github/workflows/ci/configure-ecr.sh
+          .github/workflows/ci/configure-ecr.sh
 
-      - name: Build customer-write Docker image
+      - name: Build & Push images to ECR
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          VERSION: ${{ steps.version.outputs.version }}
+          BRANCH_NAME: ${{ github.ref_name }}
         run: |
-          echo "Building customer-write module..."
-          docker build \
-            --build-arg MODULE=customer-write \
-            -t ${{ secrets.DOCKERHUB_USERNAME }}/customer-write:latest .
+          chmod +x .github/workflows/ci/build-and-push.sh
+          .github/workflows/ci/build-and-push.sh
 
-      - name: Push customer-read to Docker Hub
-        run: docker push ${{ secrets.DOCKERHUB_USERNAME }}/customer-read:latest
+      - name: Scan images and check results
+        if: github.event_name == 'pull_request'
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          chmod +x .github/workflows/ci/scan-images.sh
+          .github/workflows/ci/scan-images.sh
 
-      - name: Push customer-write to Docker Hub
-        run: docker push ${{ secrets.DOCKERHUB_USERNAME }}/customer-write:latest
+  infra:
+    name: Deploy Infrastructure
+    runs-on: ubuntu-latest
+    needs: build
+#    if: ${{ github.ref_name == 'develop' || github.ref_name == 'master' || github.ref_name == 'test'}}
+    env:
+      STAGE: ${{ github.ref == 'refs/heads/master' && 'prod' || 'dev' }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v3
+        with:
+          distribution: 'zulu'
+          java-version: '21'
+          cache: 'maven'
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v1
+
+      - name: Install Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+
+      - name: Install AWS CDK
+        run: npm install -g aws-cdk@2
+
+      - name: Deploy AWS Infrastructure
+        working-directory: ecommerce-cdk
+        run: |
+          mvn clean install
+          cdk bootstrap
+          cdk deploy --all --require-approval never \
+            --context stage=${{ env.STAGE }} \
+            --context account=${{ secrets.AWS_ACCOUNT_ID }}
+
+      - name: Get EKS cluster config
+        run: |
+          aws eks update-kubeconfig \
+            --name ecommerce-${{ env.STAGE }} \
+            --region ${{ env.AWS_REGION }}
+
+      - name: Install CDK8s CLI
+        run: npm install -g cdk8s-cli
+
+      - name: Deploy Base Infrastructure to K8s
+        working-directory: ecommerce-cdk8s
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          TAG: ${{ needs.build.outputs.version }}
+          REPLICAS: ${{ env.STAGE == 'prod' && '3' || '1' }}
+        run: |
+          chmod +x ../.github/workflows/ci/deploy-k8s-base.sh
+          ../.github/workflows/ci/deploy-k8s-base.sh
+
+  deploy-apps:
+    name: Deploy Applications
+    runs-on: ubuntu-latest
+    needs: [ build, infra ]
+#    if: ${{ github.ref_name == 'develop' || github.ref_name == 'master' || github.ref_name == 'test'}}
+    env:
+      STAGE: ${{ github.ref == 'refs/heads/master' && 'prod' || 'dev' }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Update kubeconfig
+        run: |
+          aws eks update-kubeconfig \
+            --name ecommerce-${{ env.STAGE }} \
+            --region ${{ env.AWS_REGION }}
+
+      - name: Install Argo CD CLI
+        run: |
+          chmod +x .github/workflows/ci/install-argocd.sh
+          .github/workflows/ci/install-argocd.sh
+
+      - name: Deploy with Argo CD
+        run: |
+          chmod +x .github/workflows/ci/deploy-argocd.sh
+          .github/workflows/ci/deploy-argocd.sh
+
+  test-deployment:
+    name: Test Deployment
+    runs-on: ubuntu-latest
+    needs: deploy-apps
+#    if: ${{ github.ref_name == 'develop' || github.ref_name == 'master' || github.ref_name == 'test'}}
+    env:
+      STAGE: ${{ github.ref == 'refs/heads/master' && 'prod' || 'dev' }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Update kubeconfig
+        run: |
+          aws eks update-kubeconfig \
+            --name ecommerce-${{ env.STAGE }} \
+            --region ${{ env.AWS_REGION }}
+
+      - name: Run smoke tests
+        run: |
+          chmod +x .github/workflows/ci/smoke-tests.sh
+          .github/workflows/ci/smoke-tests.sh
