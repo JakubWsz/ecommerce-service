@@ -56,26 +56,28 @@ jobs:
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v1
 
+      - name: Create and configure ECR repositories
+        run: |
+          chmod +x .github/workflows/ci/configure-ecr.sh
+          .github/workflows/ci/configure-ecr.sh
+
       - name: Build & Push images to ECR
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
           VERSION: ${{ steps.version.outputs.version }}
+          BRANCH_NAME: ${{ github.ref_name }}
         run: |
-          docker build \
-            -f customer-read/Dockerfile \
-            -t $ECR_REGISTRY/ecommerce-customer-read:$VERSION \
-            -t $ECR_REGISTRY/ecommerce-customer-read:latest \
-            .
-          docker push $ECR_REGISTRY/ecommerce-customer-read:$VERSION
-          docker push $ECR_REGISTRY/ecommerce-customer-read:latest
-          
-          docker build \
-            -f customer-write/Dockerfile \
-            -t $ECR_REGISTRY/ecommerce-customer-write:$VERSION \
-            -t $ECR_REGISTRY/ecommerce-customer-write:latest \
-            .
-          docker push $ECR_REGISTRY/ecommerce-customer-write:$VERSION
-          docker push $ECR_REGISTRY/ecommerce-customer-write:latest
+          chmod +x .github/workflows/ci/build-and-push.sh
+          .github/workflows/ci/build-and-push.sh
+
+      - name: Scan images and check results
+        if: github.event_name == 'pull_request'
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          chmod +x .github/workflows/ci/scan-images.sh
+          .github/workflows/ci/scan-images.sh
 
   infra:
     name: Deploy Infrastructure
@@ -102,6 +104,10 @@ jobs:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v1
 
       - name: Install Node.js
         uses: actions/setup-node@v3
@@ -132,20 +138,12 @@ jobs:
       - name: Deploy Base Infrastructure to K8s
         working-directory: ecommerce-cdk8s
         env:
-          ECR_URI: ${{ steps.login-ecr.outputs.registry }}/ecommerce
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
           TAG: ${{ needs.build.outputs.version }}
           REPLICAS: ${{ env.STAGE == 'prod' && '3' || '1' }}
         run: |
-          mvn clean install
-          
-          cdk8s synth -a "mvn exec:java -Dexec.mainClass=pl.ecommerce.k8s.BaseInfrastructureMain"
-          kubectl apply -f dist/
-          
-          kubectl wait --for=condition=available --timeout=300s \
-            deployment/cert-manager -n cert-manager
-          
-          cdk8s synth
-          kubectl apply -f dist/
+          chmod +x ../.github/workflows/ci/deploy-k8s-base.sh
+          ../.github/workflows/ci/deploy-k8s-base.sh
 
   deploy-apps:
     name: Deploy Applications
@@ -156,6 +154,9 @@ jobs:
       STAGE: ${{ github.ref == 'refs/heads/master' && 'prod' || 'dev' }}
 
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v2
         with:
@@ -171,38 +172,26 @@ jobs:
 
       - name: Install Argo CD CLI
         run: |
-          curl -sSL -o argocd \
-            https://github.com/argoproj/argo-cd/releases/latest/download/argocd-linux-amd64
-          chmod +x argocd
-          sudo mv argocd /usr/local/bin/
+          chmod +x .github/workflows/ci/install-argocd.sh
+          .github/workflows/ci/install-argocd.sh
 
-      - name: Create Argo CD Application
+      - name: Deploy with Argo CD
         run: |
-          # Najpierw sprawdzamy czy aplikacja istnieje
-          if ! argocd app get ecommerce-app --grpc-web; then
-            argocd app create ecommerce-app \
-              --repo ${{ github.server_url }}/${{ github.repository }}.git \
-              --revision ${{ github.ref }} \
-              --path ecommerce-cdk8s/dist \
-              --dest-server https://kubernetes.default.svc \
-              --dest-namespace ecommerce \
-              --sync-policy automated \
-              --self-heal \
-              --grpc-web
-          fi
-
-      - name: Sync Argo CD Application
-        run: |
-          argocd app sync ecommerce-app --grpc-web
-          argocd app wait ecommerce-app --health --timeout 600 --grpc-web
+          chmod +x .github/workflows/ci/deploy-argocd.sh
+          .github/workflows/ci/deploy-argocd.sh
 
   test-deployment:
     name: Test Deployment
     runs-on: ubuntu-latest
     needs: deploy-apps
     if: github.ref == 'refs/heads/develop' || github.ref == 'refs/heads/master'
+    env:
+      STAGE: ${{ github.ref == 'refs/heads/master' && 'prod' || 'dev' }}
 
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v2
         with:
@@ -210,14 +199,13 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
 
+      - name: Update kubeconfig
+        run: |
+          aws eks update-kubeconfig \
+            --name ecommerce-${{ env.STAGE }} \
+            --region ${{ env.AWS_REGION }}
+
       - name: Run smoke tests
         run: |
-          ENDPOINT=$(kubectl get ingress ecommerce-ingress -n ecommerce \
-            -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
-          
-          for service in customer-read customer-write; do
-            echo "Testing $service health..."
-            curl -f http://$ENDPOINT/$service/actuator/health || exit 1
-          done
-          
-          echo "All services are healthy!"
+          chmod +x .github/workflows/ci/smoke-tests.sh
+          .github/workflows/ci/smoke-tests.sh
