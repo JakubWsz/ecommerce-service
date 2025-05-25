@@ -8,15 +8,15 @@ ENV MAVEN_OPTS="-XX:+TieredCompilation -XX:TieredStopAtLevel=1"
 WORKDIR /app
 
 COPY pom.xml .
-RUN mvn -N install -DskipTests
-
 COPY commons/pom.xml commons/
 COPY customer-read/pom.xml customer-read/
-RUN mvn -f customer-read/pom.xml dependency:go-offline -B
 
-COPY commons/ commons/
-COPY customer-read/ customer-read/
-RUN mvn -f customer-read/pom.xml -B -ntp -Dmaven.test.skip=true package
+RUN mvn dependency:go-offline -pl customer-read -am -B
+
+COPY commons/src commons/src
+COPY customer-read/src customer-read/src
+
+RUN mvn -B -ntp -Dmaven.test.skip=true -pl customer-read -am package
 
 FROM eclipse-temurin:21-jre-alpine
 
