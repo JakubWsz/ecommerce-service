@@ -11,7 +11,7 @@ COPY pom.xml .
 COPY commons/pom.xml commons/
 COPY customer-write/pom.xml customer-write/
 
-RUN mvn dependency:go-offline -pl customer-read -am -B
+RUN mvn dependency:go-offline -pl customer-write -am -B
 
 COPY commons/src commons/src
 COPY customer-write/src customer-write/src
