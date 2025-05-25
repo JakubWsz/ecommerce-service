@@ -3,7 +3,7 @@ kind: Deployment
 metadata:
   name: {{ include "customer-write.fullname" . }}
   labels:
-    {{- include "customer-write.labels" . | nindent 4 }}
+    {{ include "customer-write.labels" . | nindent 4 }}
 spec:
   replicas: {{ .Values.replicaCount }}
   selector:
