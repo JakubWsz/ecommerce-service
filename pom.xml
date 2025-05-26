@@ -18,7 +18,6 @@
         <module>customer-write</module>
         <module>customer-read</module>
         <module>ecommerce-cdk</module>
-        <module>ecommerce-cdk8s</module>
         <!--        <module>vendor-write</module>-->
 <!--        <module>vendor-read</module>-->
 <!--        <module>product-write</module>-->

@@ -85,6 +85,8 @@ jobs:
     if: ${{ github.ref_name == 'develop' || github.ref_name == 'master' || github.ref_name == 'test' }}
     env:
       STAGE: ${{ github.ref == 'refs/heads/master' && 'prod' || 'dev' }}
+    outputs:
+      ecr_registry: ${{ steps.login-ecr.outputs.registry }}
 
     steps:
       - name: Checkout repository
@@ -131,18 +133,23 @@ jobs:
             --name ecommerce-${{ env.STAGE }} \
             --region ${{ env.AWS_REGION }}
 
-      - name: Install CDK8s CLI
-        run: npm install -g cdk8s-cli
+      - name: Install Helm
+        run: |
+          curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+          helm version
 
-      - name: Deploy Base Infrastructure to K8s
-        working-directory: ecommerce-cdk8s
+      - name: Deploy Infrastructure with Helm
+        working-directory: helm
         env:
-          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-          TAG: ${{ needs.build.outputs.version }}
           REPLICAS: ${{ env.STAGE == 'prod' && '3' || '1' }}
         run: |
-          chmod +x ../.github/workflows/ci/deploy-k8s-base.sh
-          ../.github/workflows/ci/deploy-k8s-base.sh
+          chmod +x ../.github/workflows/ci/deploy-helm-infrastructure.sh
+          ../.github/workflows/ci/deploy-helm-infrastructure.sh
+
+      - name: Save CDK outputs
+        run: |
+          chmod +x .github/workflows/ci/save-cdk-outputs.sh
+          .github/workflows/ci/save-cdk-outputs.sh
 
   deploy-apps:
     name: Deploy Applications
@@ -151,6 +158,7 @@ jobs:
     if: ${{ github.ref_name == 'develop' || github.ref_name == 'master' || github.ref_name == 'test'}}
     env:
       STAGE: ${{ github.ref == 'refs/heads/master' && 'prod' || 'dev' }}
+      ECR_REGISTRY: ${{ needs.infra.outputs.ecr_registry }}
 
     steps:
       - name: Checkout repository
@@ -169,15 +177,29 @@ jobs:
             --name ecommerce-${{ env.STAGE }} \
             --region ${{ env.AWS_REGION }}
 
+      - name: Install Helm
+        run: |
+          curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+          helm version
+
       - name: Install Argo CD CLI
         run: |
           chmod +x .github/workflows/ci/install-argocd.sh
           .github/workflows/ci/install-argocd.sh
 
-      - name: Deploy with Argo CD
+      - name: Deploy Applications with Helm
+        env:
+          VERSION: ${{ needs.build.outputs.version }}
         run: |
-          chmod +x .github/workflows/ci/deploy-argocd.sh
-          .github/workflows/ci/deploy-argocd.sh
+          chmod +x .github/workflows/ci/deploy-helm-apps.sh
+          .github/workflows/ci/deploy-helm-apps.sh
+
+      - name: Configure Argo CD for Helm
+        env:
+          VERSION: ${{ needs.build.outputs.version }}
+        run: |
+          chmod +x .github/workflows/ci/configure-argocd-helm.sh
+          .github/workflows/ci/configure-argocd-helm.sh
 
   test-deployment:
     name: Test Deployment
