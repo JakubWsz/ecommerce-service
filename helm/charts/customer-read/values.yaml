@@ -1,4 +1,3 @@
-# Default values for customer-read.
 replicaCount: 1
 
 image:
