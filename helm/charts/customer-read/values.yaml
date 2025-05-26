@@ -32,3 +32,5 @@ nodeSelector: {}
 tolerations: []
 
 affinity: {}
+global:
+  imagePullSecrets: []

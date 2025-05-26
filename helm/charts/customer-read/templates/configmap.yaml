@@ -1,9 +1,8 @@
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: {{ include "customer-read.fullname" . }}-config
-  labels:
-{{- include "customer-read.labels" . | nindent 4 }}
+  name: {{ include "customer-read.fullname" . }}
+  labels: {"app.kubernetes.io/name": "{{ .Chart.Name }}", "app.kubernetes.io/instance": "{{ .Release.Name }}"}
 data:
   application.yml: |
     # Common configuration for all profiles
