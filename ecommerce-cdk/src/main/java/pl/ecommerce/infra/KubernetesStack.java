@@ -61,11 +61,16 @@ public class KubernetesStack extends Stack {
                 .amiType(NodegroupAmiType.AL2_X86_64)
                 .build());
 
-        installEksAddons(stage);
+        installEksAddons();
         createServiceAccounts();
+
+        new CfnOutput(this, "ClusterName", CfnOutputProps.builder()
+                .value(eksCluster.getClusterName())
+                .exportName(String.format("eks-cluster-name-%s", stage))
+                .build());
     }
 
-    private void installEksAddons(String stage) {
+    private void installEksAddons() {
         new CfnAddon(this, "VpcCniAddon", CfnAddonProps.builder()
                 .addonName("vpc-cni")
                 .addonVersion("v1.15.0-eksbuild.2")

@@ -51,10 +51,11 @@ public class MessagingStack extends Stack {
                                 .build())
                         .build())
                 .build();
-    }
 
-    public String getKafkaBootstrapServers() {
-        return Fn.importValue(String.format("kafka-bootstrap-%s",
-                Stack.of(this).getStackName()));
+        new CfnOutput(this, "KafkaBootstrapServers", CfnOutputProps.builder()
+                .value(kafkaCluster.getAtt("BootstrapBrokerStringTls").toString())
+                .exportName(String.format("kafka-bootstrap-servers-%s", stage))
+                .description("MSK Bootstrap servers for TLS connection")
+                .build());
     }
 }

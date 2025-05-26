@@ -1,7 +1,6 @@
 package pl.ecommerce.infra;
 
-import software.amazon.awscdk.Stack;
-import software.amazon.awscdk.StackProps;
+import software.amazon.awscdk.*;
 import software.amazon.awscdk.services.ec2.*;
 import software.constructs.Construct;
 import java.util.List;
@@ -37,7 +36,19 @@ public class NetworkStack extends Stack {
                 ))
                 .build();
 
+        if (Objects.equals(stage, "prod")) {
+            FlowLog.Builder.create(this, "VpcFlowLog")
+                    .resourceType(FlowLogResourceType.fromVpc(vpc))
+                    .trafficType(FlowLogTrafficType.ALL)
+                    .build();
+        }
+
         this.securityGroups = createSecurityGroups(stage);
+
+        new CfnOutput(this, "VpcId", CfnOutputProps.builder()
+                .value(vpc.getVpcId())
+                .exportName(String.format("vpc-id-%s", stage))
+                .build());
     }
 
     private List<SecurityGroup> createSecurityGroups(String stage) {
@@ -61,14 +72,26 @@ public class NetworkStack extends Stack {
 
         dbSecurityGroup.addIngressRule(
                 eksSecurityGroup,
+                Port.tcp(6379),
+                "Allow Redis from EKS"
+        );
+
+        dbSecurityGroup.addIngressRule(
+                eksSecurityGroup,
                 Port.tcp(27017),
                 "Allow MongoDB from EKS"
+        );
+
+        eksSecurityGroup.addIngressRule(
+                eksSecurityGroup,
+                Port.tcp(9092),
+                "Allow Kafka within EKS"
         );
 
         return List.of(eksSecurityGroup, dbSecurityGroup);
     }
 
     public Vpc getVpc() { return vpc; }
-    public SecurityGroup getEksSecurityGroup() { return securityGroups.getFirst(); }
+    public SecurityGroup getEksSecurityGroup() { return securityGroups.get(0); }
     public SecurityGroup getDbSecurityGroup() { return securityGroups.get(1); }
 }
